@@ -1452,6 +1452,9 @@ std::unordered_map<CNTK::StreamInformation, std::pair<CNTK::NDArrayViewPtr, CNTK
 %inline %{
     class SwigMinibatchSource;
     typedef std::shared_ptr<SwigMinibatchSource> SwigMinibatchSourcePtr;
+
+    class SwigDataDeserializer;
+    typedef std::shared_ptr<SwigDataDeserializer> SwigDataDeserializerPtr;
 %}
 
 %shared_ptr(CNTK::SwigMinibatchSource)
