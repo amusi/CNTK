@@ -672,13 +672,13 @@ public:
 %feature("nodirector") CNTK::SwigMinibatchSource::GetNextMinibatch;//(size_t minibatchSizeInSamples, size_t minibatchSizeInSequences, size_t numberOfWorkers, size_t workerRank, const DeviceDescriptor&);
 %feature("nodirector") CNTK::SwigMinibatchSource::GetCheckpointState;
 
-%feature("directory") CNTK::SwigDataDeserializer;
+%feature("director") CNTK::SwigDataDeserializer;
 %feature("nodirector") CNTK::SwigDataDeserializer::GetStreamDescriptions;
 %feature("nodirector") CNTK::SwigDataDeserializer::GetChunkDescriptions;
 %feature("nodirector") CNTK::SwigDataDeserializer::GetSequencesForChunk;
 %feature("nodirector") CNTK::SwigDataDeserializer::GetSequenceDescription;
 
-%feature("directory") CNTK::SwigChunk;
+%feature("director") CNTK::SwigChunk;
 %feature("nodirector") CNTK::SwigChunk::GetSequence;
 
 %{
@@ -1803,7 +1803,7 @@ namespace CNTK
         }
     };
 
-    ::CNTK::DataDeserializerPtr CreateUserDeserializer()
+    DataDeserializerPtr CreateUserDeserializer()
     {
         return std::make_shared<SwigDataDeserializer>();
     }
@@ -1833,15 +1833,12 @@ namespace CNTK
 
 // Python deserializers should get all configuration already on the python side.
 // Here we effectively retrieve earlier created by user deserializer.
-extern "C" __declspec(dllexport) bool CreateDeserializer(CNTK::DataDeserializer** deserializer, const std::wstring& id)
+extern "C" __declspec(dllexport) bool CreateDeserializer(DataDeserializerPtr& deserializer, const std::wstring& id)
 {
     auto factory = CNTK::GetDeserializerFactory();
-    auto d = (*factory)(id);
-    NOT_IMPLEMENTED;
-    // Deserializer created.
+    deserializer = (*factory)(id);
     return true;
 }
-
 
 %}
 
