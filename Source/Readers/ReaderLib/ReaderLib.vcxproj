@@ -54,6 +54,7 @@
     <ClInclude Include="ChunkRandomizer.h" />
     <ClInclude Include="ExceptionCapture.h" />
     <ClInclude Include="Indexer.h" />
+    <ClInclude Include="LocalTimelineNoRandomizer.h" />
     <ClInclude Include="MemoryBuffer.h" />
     <ClInclude Include="ReaderBase.h" />
     <ClInclude Include="ReaderConstants.h" />
@@ -86,6 +87,7 @@
     <ClCompile Include="ChunkRandomizer.cpp" />
     <ClCompile Include="DataDeserializerBase.cpp" />
     <ClCompile Include="Indexer.cpp" />
+    <ClCompile Include="LocalTimelineNoRandomizer.cpp" />
     <ClCompile Include="MemoryBuffer.cpp" />
     <ClCompile Include="NoRandomizer.cpp" />
     <ClCompile Include="BlockRandomizer.cpp" />

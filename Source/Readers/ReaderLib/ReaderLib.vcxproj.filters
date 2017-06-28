@@ -97,6 +97,9 @@
     <ClInclude Include="MemoryBuffer.h">
       <Filter>Utils</Filter>
     </ClInclude>
+    <ClInclude Include="LocalTimelineNoRandomizer.h">
+      <Filter>Randomizers</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="NoRandomizer.cpp">
@@ -146,6 +149,9 @@
     </ClCompile>
     <ClCompile Include="MemoryBuffer.cpp">
       <Filter>Utils</Filter>
+    </ClCompile>
+    <ClCompile Include="LocalTimelineNoRandomizer.cpp">
+      <Filter>Randomizers</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>

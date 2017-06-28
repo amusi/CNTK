@@ -49,10 +49,10 @@ public:
     virtual void SetConfiguration(const ReaderConfiguration& config) = 0;
 
     // Set current sample position
-    virtual void SetCurrentSamplePosition(size_t currentSamplePosition) = 0;
+    virtual void SetCurrentSamplePosition(const Dictionary& currentSamplePosition) = 0;
 
     // Returns current position in the global timeline. The returned value is in samples.
-    virtual size_t GetCurrentSamplePosition() = 0;
+    virtual Dictionary GetCurrentSamplePosition() = 0;
 
     // Gets next sequences up to a maximum count of local and global samples.
     virtual Sequences GetNextSequences(size_t globalSampleCount, size_t localSampleCount) = 0;
