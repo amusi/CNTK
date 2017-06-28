@@ -51,7 +51,7 @@ void LocalTimelineNoRandomizer::StartEpoch(const EpochConfiguration& config)
     zeroPosition[L"sequencePositionInSweep"] = 0;
     zeroPosition[L"currentChunkPosition"] = 0;
     zeroPosition[L"currentSequencePositionInChunk"] = 0;
-    SetCurrentSamplePosition(zeroPosition);
+    SetState(zeroPosition);
 }
 
 void LocalTimelineNoRandomizer::MoveToNextSequence()
@@ -201,7 +201,7 @@ Sequences LocalTimelineNoRandomizer::GetNextSequences(size_t, size_t sampleCount
     return result;
 }
 
-Dictionary LocalTimelineNoRandomizer::GetCurrentSamplePosition()
+Dictionary LocalTimelineNoRandomizer::GetState()
 {
     Dictionary result;
     result[L"sweepSizeInSamples"] = m_sweepSizeInSamples;
@@ -213,17 +213,17 @@ Dictionary LocalTimelineNoRandomizer::GetCurrentSamplePosition()
     return result;
 }
 
-void LocalTimelineNoRandomizer::SetCurrentSamplePosition(const Dictionary& position)
+void LocalTimelineNoRandomizer::SetState(const Dictionary& state)
 {
-    m_sweepSizeInSamples = position[L"sweepSizeInSamples"].Value<size_t>();
-    m_sweepIndex = position[L"sweepIndex"].Value<size_t>();
-    m_samplePositionInSweep = position[L"samplePositionInSweep"].Value<size_t>();
-    m_sequencePositionInSweep = position[L"sequencePositionInSweep"].Value<size_t>();
+    m_sweepSizeInSamples = state[L"sweepSizeInSamples"].Value<size_t>();
+    m_sweepIndex = state[L"sweepIndex"].Value<size_t>();
+    m_samplePositionInSweep = state[L"samplePositionInSweep"].Value<size_t>();
+    m_sequencePositionInSweep = state[L"sequencePositionInSweep"].Value<size_t>();
 
     auto oldChunkPosition = m_currentChunkPosition;
 
-    m_currentChunkPosition = (ChunkIdType)position[L"currentChunkPosition"].Value<size_t>();
-    m_currentSequencePositionInChunk = position[L"currentSequencePositionInChunk"].Value<size_t>();
+    m_currentChunkPosition = (ChunkIdType)state[L"currentChunkPosition"].Value<size_t>();
+    m_currentSequencePositionInChunk = state[L"currentSequencePositionInChunk"].Value<size_t>();
 
     if (oldChunkPosition != m_currentChunkPosition)
     {

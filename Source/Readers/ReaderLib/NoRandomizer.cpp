@@ -61,7 +61,9 @@ void NoRandomizer::StartEpoch(const EpochConfiguration& config)
     else if (m_config.m_totalEpochSizeInSamples == Microsoft::MSR::CNTK::requestDataSize)
         m_config.m_totalEpochSizeInSamples = m_sweepSizeInSamples;
 
-    SetCurrentSamplePosition(m_config.m_totalEpochSizeInSamples * config.m_epochIndex);
+    Dictionary state;
+    state[L"globalSamplePosition"] = m_config.m_totalEpochSizeInSamples * config.m_epochIndex;
+    SetState(state);
 }
 
 // Moving the cursor to the next sequence. Possibly updating the chunk information if needed.
@@ -146,9 +148,11 @@ void NoRandomizer::GetNextSequenceDescriptions(size_t numGlobalSamplesToLoad, si
     result.m_endOfSweep |= sweepIndex != m_globalSamplePosition / m_sweepSizeInSamples;
 }
 
-size_t NoRandomizer::GetCurrentSamplePosition()
+Dictionary NoRandomizer::GetState()
 {
-    return m_globalSamplePosition;
+    Dictionary result;
+    result[L"globalSamplePosition"] = m_globalSamplePosition;
+    return result;;
 }
 
 Sequences NoRandomizer::GetNextSequences(size_t globalSampleCount, size_t localSampleCount)
@@ -247,8 +251,10 @@ Sequences NoRandomizer::GetNextSequences(size_t globalSampleCount, size_t localS
     return result;
 }
 
-void NoRandomizer::SetCurrentSamplePosition(size_t samplePosition)
+void NoRandomizer::SetState(const Dictionary& state)
 {
+    size_t samplePosition = state[L"globalSamplePosition"].Value<size_t>();
+
     m_currentSequencePositionInChunk = 0;
     m_globalSamplePosition = samplePosition;
     size_t sweepSamplePosition = m_globalSamplePosition % m_sweepSizeInSamples;

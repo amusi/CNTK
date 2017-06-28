@@ -108,7 +108,6 @@ public:
     // Sets a new configuration for the reader.
     virtual void SetConfiguration(const ReaderConfiguration& config, const std::map<std::wstring, int>& inputDescriptions) = 0;
 
-
     // Describes the streams this reader produces.
     virtual std::vector<StreamInformation> GetStreamDescriptions() = 0;
 
@@ -119,10 +118,10 @@ public:
     // Currently in case of sequence to sequence training, 
     // the logical sequence size in samples = max(constitutuing sequences among all streams)
     // This will probably change in the future.
-    virtual size_t GetCurrentSamplePosition() = 0;
+    virtual Dictionary GetState() = 0;
 
     // Set current global position
-    virtual void SetCurrentSamplePosition(size_t currentSamplePosition) = 0;
+    virtual void SetState(const Dictionary& state) = 0;
 
     virtual ~Reader() {};
 };

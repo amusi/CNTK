@@ -53,9 +53,11 @@ BlockRandomizer::BlockRandomizer(
     }
 }
 
-size_t BlockRandomizer::GetCurrentSamplePosition()
+Dictionary BlockRandomizer::GetState()
 {
-    return m_globalSamplePosition;
+    Dictionary result;
+    result[L"globalSamplePosition"] = m_globalSamplePosition;
+    return result;
 }
 
 // Start a new epoch.
@@ -83,7 +85,9 @@ void BlockRandomizer::StartEpoch(const EpochConfiguration& config)
         InvalidArgument("Too big epoch size can cause bit overflow");
 
     m_epochStartPosition = m_epochSize * config.m_epochIndex;
-    SetCurrentSamplePosition(m_epochStartPosition);
+    Dictionary state;
+    state[L"globalSamplePosition"] = m_epochStartPosition;
+    SetState(state);
     if (m_verbosity >= Notification)
     {
         size_t epochStartFrame = config.m_epochIndex * m_epochSize;
@@ -466,8 +470,9 @@ void BlockRandomizer::Prefetch(ChunkIdType chunkId)
     }
 }
 
-void BlockRandomizer::SetCurrentSamplePosition(size_t currentSamplePosition)
+void BlockRandomizer::SetState(const Dictionary& state)
 {
+    auto currentSamplePosition = state[L"globalSamplePosition"].Value<size_t>();
     PrepareNewSweepIfNeeded(currentSamplePosition);
 
     // Sets sequence cursor to the sequence that corresponds to the epoch start position.

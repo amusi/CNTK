@@ -63,14 +63,14 @@ Minibatch ReaderBase::ReadMinibatch()
     return m_packer->ReadMinibatch();
 }
 
-size_t ReaderBase::GetCurrentSamplePosition()
+Dictionary ReaderBase::GetState()
 {
-    return m_sequenceEnumerator->GetCurrentSamplePosition();
+    return m_sequenceEnumerator->GetState();
 }
 
-void ReaderBase::SetCurrentSamplePosition(size_t currentSamplePosition)
+void ReaderBase::SetState(const Dictionary& state)
 {
-    m_sequenceEnumerator->SetCurrentSamplePosition(currentSamplePosition);
+    m_sequenceEnumerator->SetState(state);
     m_packer->Reset();
 }
 

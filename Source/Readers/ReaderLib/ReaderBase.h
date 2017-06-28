@@ -28,9 +28,9 @@ namespace CNTK {
         Minibatch ReadMinibatch() override;
 
         // Returns current position in the global timeline. The returned value is in samples.
-        size_t GetCurrentSamplePosition() override;
+        Dictionary GetState() override;
 
-        void SetCurrentSamplePosition(size_t currentSamplePosition) override;
+        void SetState(const Dictionary& state) override;
 
         void SetConfiguration(const ReaderConfiguration& config, const std::map<std::wstring, int>& inputDescriptions) override;
 

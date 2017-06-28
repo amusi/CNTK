@@ -42,9 +42,9 @@ public:
     }
 
     // Returns current position in the global timeline. The returned value is in samples.
-    size_t GetCurrentSamplePosition() override
+    Dictionary GetState() override
     {
-        return m_sequenceProvider->GetCurrentSamplePosition();
+        return m_sequenceProvider->GetState();
     }
 
     // Sets configuration for the current epoch.
@@ -60,9 +60,9 @@ public:
         m_sequenceProvider->StartEpoch(config);
     }
 
-    void SetCurrentSamplePosition(size_t currentSamplePosition) override
+    void SetState(const Dictionary& state) override
     {
-        m_sequenceProvider->SetCurrentSamplePosition(currentSamplePosition);
+        m_sequenceProvider->SetState(state);
     }
 
     // Description of streams that the transformer provides.

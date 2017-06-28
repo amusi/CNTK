@@ -205,7 +205,9 @@ BOOST_AUTO_TEST_CASE(CheckSetCurrentCursorForRandomizers)
         underTest->StartEpoch(config);
 
         // Rereading second epoch
-        underTest->SetCurrentSamplePosition(firstEpoch.size());
+        Dictionary state;
+        state[L"globalSamplePosition"] = firstEpoch.size();
+        underTest->SetState(state);
         auto anotherSecond = ReadNextSamples(underTest, secondEpoch.size());
         BOOST_CHECK_EQUAL_COLLECTIONS(
             secondEpoch.begin(),
@@ -214,7 +216,8 @@ BOOST_AUTO_TEST_CASE(CheckSetCurrentCursorForRandomizers)
             anotherSecond.end());
 
         // Rereading first epoch
-        underTest->SetCurrentSamplePosition(0);
+        state[L"globalSamplePosition"] = 0;
+        underTest->SetState(state);
         auto anotherFirst = ReadNextSamples(underTest, firstEpoch.size());
         BOOST_CHECK_EQUAL_COLLECTIONS(
             firstEpoch.begin(),
@@ -223,7 +226,8 @@ BOOST_AUTO_TEST_CASE(CheckSetCurrentCursorForRandomizers)
             anotherFirst.end());
 
         // Rereading third epoch
-        underTest->SetCurrentSamplePosition(firstEpoch.size() + secondEpoch.size());
+        state[L"globalSamplePosition"] = firstEpoch.size() + secondEpoch.size();
+        underTest->SetState(state);
         auto anotherThird = ReadNextSamples(underTest, thirdEpoch.size());
         BOOST_CHECK_EQUAL_COLLECTIONS(
             thirdEpoch.begin(),
@@ -941,21 +945,21 @@ BOOST_AUTO_TEST_CASE(CheckGetCurrentCursorForRandomizers)
     auto test = [](SequenceEnumeratorPtr r, size_t epochSize)
     {
         auto firstEpoch = ReadFullEpoch(r, epochSize, 0);
-        auto firstCursor = r->GetCurrentSamplePosition();
-        BOOST_CHECK_EQUAL(firstCursor, firstEpoch.size());
+        auto firstCursor = r->GetState();
+        BOOST_CHECK_EQUAL(firstCursor[L"globalSamplePosition"].Value<size_t>(), firstEpoch.size());
 
         auto secondEpoch = ReadFullEpoch(r, epochSize, 1);
-        auto secondCursor = r->GetCurrentSamplePosition();
-        BOOST_CHECK_EQUAL(secondCursor - firstCursor, secondEpoch.size());
+        auto secondCursor = r->GetState();
+        BOOST_CHECK_EQUAL(secondCursor[L"globalSamplePosition"].Value<size_t>() - firstCursor[L"globalSamplePosition"].Value<size_t>(), secondEpoch.size());
 
         auto thirdEpoch = ReadFullEpoch(r, epochSize, 2);
-        auto thirdCursor = r->GetCurrentSamplePosition();
-        BOOST_CHECK_EQUAL(thirdCursor - secondCursor, thirdEpoch.size());
+        auto thirdCursor = r->GetState();
+        BOOST_CHECK_EQUAL(thirdCursor[L"globalSamplePosition"].Value<size_t>() - secondCursor[L"globalSamplePosition"].Value<size_t>(), thirdEpoch.size());
 
         auto anotherSecondEpoch = ReadFullEpoch(r, epochSize, 1);
-        auto anotherSecondCursor = r->GetCurrentSamplePosition();
+        auto anotherSecondCursor = r->GetState();
 
-        BOOST_CHECK_EQUAL(anotherSecondCursor, secondCursor);
+        BOOST_CHECK_EQUAL(anotherSecondCursor[L"globalSamplePosition"].Value<size_t>(), secondCursor[L"globalSamplePosition"].Value<size_t>());
     };
 
     // Inside sweep
@@ -2108,7 +2112,9 @@ BOOST_AUTO_TEST_CASE(TestTruncatedBpttPacker)
         sampleCount += mb.m_data[0]->m_layout->GetActualNumSamples();
     }
 
-    noRandomizer->SetCurrentSamplePosition(sweepNumberOfSamples);
+    Dictionary state;
+    state[L"globalSamplePosition"] = sweepNumberOfSamples;
+    noRandomizer->SetState(state);
     packer->Reset();
 
     auto mb = packer->ReadMinibatch();

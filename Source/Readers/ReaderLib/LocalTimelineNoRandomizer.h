@@ -31,8 +31,8 @@ public:
         return m_deserializer->GetStreamDescriptions();
     }
 
-    Dictionary GetCurrentSamplePosition() override;
-    void SetCurrentSamplePosition(const Dictionary& currentSamplePosition) override;
+    Dictionary GetState() override;
+    void SetState(const Dictionary& state) override;
 
     void SetConfiguration(const ReaderConfiguration& config) override;
 
