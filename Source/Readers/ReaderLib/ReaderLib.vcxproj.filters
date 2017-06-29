@@ -100,6 +100,12 @@
     <ClInclude Include="LocalTimelineNoRandomizer.h">
       <Filter>Randomizers</Filter>
     </ClInclude>
+    <ClInclude Include="LocalTimelineBlockRandomizer.h">
+      <Filter>Randomizers</Filter>
+    </ClInclude>
+    <ClInclude Include="LocalTimelineRandomizerBase.h">
+      <Filter>Randomizers</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="NoRandomizer.cpp">
@@ -153,6 +159,12 @@
     <ClCompile Include="LocalTimelineNoRandomizer.cpp">
       <Filter>Randomizers</Filter>
     </ClCompile>
+    <ClCompile Include="LocalTimelineBlockRandomizer.cpp">
+      <Filter>Randomizers</Filter>
+    </ClCompile>
+    <ClCompile Include="LocalTimelineRandomizerBase.cpp">
+      <Filter>Randomizers</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <Filter Include="Interfaces">
@@ -176,5 +188,8 @@
     <Filter Include="Transformers">
       <UniqueIdentifier>{90d4b51b-73ae-47f5-9a9e-97ef287dcead}</UniqueIdentifier>
     </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="ClassDiagram.cd" />
   </ItemGroup>
 </Project>
