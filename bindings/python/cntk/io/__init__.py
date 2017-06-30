@@ -1123,6 +1123,7 @@ class UserDeserializer(cntk_py.SwigDataDeserializer):
     def __init__(self):
         super(UserDeserializer, self).__init__()
 
+    @property
     def stream_infos(self):
         '''
         Should return a list of meta information :class:`StreamInformation` about all 
@@ -1133,31 +1134,12 @@ class UserDeserializer(cntk_py.SwigDataDeserializer):
         '''
         raise NotImplementedError
 
+    @property
     def chunk_infos(self):
         '''
-        Should return a list of meta information :class:`ChunkInformation` about all chunks
-        exposed by the deserializer. Each chunk usually corresponds to 32-64MB of data and
-        will be prefetched later on a separate thread by get_chunk method.
-
-        Returns:
-            list of :class:`ChunkInformation` describing the corpus
+        Array of unique chunk ids.
         '''
         raise NotImplementedError
-
-    def sequence_infos_for_chunk(self, chunk_id):
-        '''
-        Should return a list of sequence meta information :class:`SequenceInformation`
-        that fully describes the chunk with the given chunk_id. This information
-        is used by the randomizer to build the global timeline and have a common view
-        on a particular minibatch in distributed case.
-
-        Args:
-            chunk_id(int): id of the chunk returned earlier by chunk_infos method
-
-        Returns:
-            list of :class:`SequenceInformation` describing the specified chunk
-        '''
-        raise NotImplementedError 
 
     def get_chunk(self, chunk_id):
         '''
@@ -1177,32 +1159,21 @@ class UserDeserializer(cntk_py.SwigDataDeserializer):
         infos.extend(inner)
         streams = {si.m_name: si for si in inner}
         self.streams = Record(**streams)
+        self._last_chunk = None
+        self._last_chunk_id = None
 
     def _chunk_infos(self, infos=None):
         infos.extend(self.chunk_infos())
 
     def _get_chunk(self, chunk_id):
-        return self.get_chunk(chunk_id)
+        self._last_chunk = self.get_chunk(chunk_id)
+        self._last_chunk_id = chunk_id
+        return self._last_chunk
 
     def _get_sequences_for_chunk(self, chunk_id, sequences):
-        sequences.extend(self.sequence_infos_for_chunk(chunk_id))
-
-class ChunkInformation(cntk_py.ChunkDescription):
-    '''
-    Chunk meta information is used to describe a single chunk
-    exposed from the user deserializer :class:`UserDeserializer`.
-
-    Args:
-        id (int): unique id of the chunk
-        number_of_samples (int): number of samples in the chunk
-        number_of_sequences (int): number of sequences in the chunk 
-          In case all sequences are of length 1 it can be skipped.
-    '''
-    def __init__(self, id, number_of_samples, number_of_sequences=None):
-        super(ChunkInformation, self).__init__()
-        self.m_id = id
-        self.m_number_of_samples = number_of_samples
-        self.m_number_of_sequences = number_of_sequences if number_of_sequences is not None else number_of_samples
+        if self._last_chunk_id != chunk_id:
+            raise ValueError('Unexpected chunk id')
+        sequences.extend(self._last_chunk.sequence_infos())
 
 class SequenceInformation(cntk_py.SequenceDescription):
     '''
@@ -1251,6 +1222,21 @@ class UserChunk(cntk_py.SwigChunk):
         '''
         raise NotImplementedError
 
+    def sequence_infos(self):
+        '''
+        Should return a list of sequence meta information :class:`SequenceInformation`
+        that fully describes the chunk with the given chunk_id. This information
+        is used by the randomizer to build the global timeline and have a common view
+        on a particular minibatch in distributed case.
+
+        Args:
+            chunk_id(int): id of the chunk returned earlier by chunk_infos method
+
+        Returns:
+            list of :class:`SequenceInformation` describing the specified chunk
+        '''
+        raise NotImplementedError 
+
     def _get_sequence(self, sequence_id, sequences):
         sequences.extend(self.get_sequence(sequence_id))
 
@@ -1262,10 +1248,25 @@ class InMemoryChunk(UserChunk):
         data (numpy array or csr matrix): actual data of the chunk
         stream_infos (array of tuple(:class:`StreamInformation`, isSequence)): information about streams of the corresponding deserializer
     '''
-    def __init__(self, data, stream_infos):
+    def __init__(self, chunk_id, data, stream_infos, is_sequence, num_sequences):
         super(InMemoryChunk, self).__init__(stream_infos)
         self._data = data
         self._stream_infos = stream_infos
+        self._chunk_id = chunk_id
+        self._is_sequence = is_sequence
+        self._num_sequences = num_sequences
+
+    def sequence_infos(self):
+        # prefill result with sequence information from the first stream.
+        r = [SequenceInformation(index_in_chunk=i, number_of_samples=1,
+                                 chunk_id=self._chunk_id, id=i) for i in range(self._num_sequences)]
+        # update number of samples
+        for s in self._stream_infos:
+            for i in range(self._num_sequences):
+                r[i].m_number_of_samples = max(r[i].m_number_of_samples, 
+                                               self._data[s.name][i].shape[0] if self._is_sequence[s.name] else 1)
+        return r
+
 
     def get_sequence(self, sequence_id):     
         return [self._data[s.name][sequence_id] for s in self._stream_infos]
@@ -1404,22 +1405,9 @@ class FromData(UserDeserializer):
                 for i, name in enumerate(self._data.keys())]
 
     def chunk_infos(self):
-        num_samples = sum(s.m_number_of_samples for s in self.sequence_infos_for_chunk(0))
-        return [ChunkInformation(id=0, number_of_sequences=self._num_sequences, number_of_samples=num_samples)]
-
-    def sequence_infos_for_chunk(self, chunk_id):
-        if chunk_id != 0:
-            raise ValueError('Unexpected chunk id %d' % chunk_id)
-
-        # prefill result with sequence information from the first stream.
-        r = [SequenceInformation(index_in_chunk=i, number_of_samples=1,
-                                 chunk_id=0, id=i) for i in range(self._num_sequences)]
-        # update number of samples
-        for s in self.stream_infos():
-            for i in range(self._num_sequences):
-                r[i].m_number_of_samples = max(r[i].m_number_of_samples, 
-                                               self._data[s.name][i].shape[0] if self._is_sequence[s.name] else 1)
-        return r
+        return [ 0 ]
 
     def get_chunk(self, chunk_id):
-        return InMemoryChunk(self._data, self.stream_infos())
+        if chunk_id != 0:
+            raise ValueError("Unexpected chunk id")
+        return InMemoryChunk(0, self._data, self.stream_infos(), self._is_sequence, self._num_sequences)
