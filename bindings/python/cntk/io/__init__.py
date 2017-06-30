@@ -185,7 +185,7 @@ class MinibatchSource(cntk_py.MinibatchSource):
 
         id = str(uuid.uuid4())
         MinibatchSource._runtime_deserializer_table[id] = deserializer
-        d = { 'type' : id, 'module': '_cntk_py.pyd' }
+        d = { 'type' : id, 'module': '_cntk_py.pyd', 'composable': 'false' }
         return cntk.utils._py_dict_to_cntk_dict(d)
 
     def __init__(self,
@@ -203,7 +203,7 @@ class MinibatchSource(cntk_py.MinibatchSource):
 
         if not isinstance(deserializers, (list,tuple)):
             deserializers = [ deserializers ]
-       
+
         deserializers = [d if not isinstance(d, UserDeserializer) else MinibatchSource._serialize(d) for d in deserializers]
 
         config = cntk_py.MinibatchSourceConfig(deserializers)
@@ -1163,7 +1163,12 @@ class UserDeserializer(cntk_py.SwigDataDeserializer):
         self._last_chunk_id = None
 
     def _chunk_infos(self, infos=None):
-        infos.extend(self.chunk_infos())
+        inner = []
+        for c in self.chunk_infos():
+            t = cntk_py.ChunkDescription()
+            t.m_id = c
+            inner.append(t)       
+        infos.extend(inner)
 
     def _get_chunk(self, chunk_id):
         self._last_chunk = self.get_chunk(chunk_id)

@@ -1081,6 +1081,7 @@ def test_prefetch_with_unpacking(tmpdir):
             empty = True
 
 def test_inmemory_deserializer_dense_sample():
+    import pdb; pdb.set_trace()
     N = 5
     X = np.arange(3*N).reshape(N,3).astype(np.float32) # 5 rows of 3 values
     s = MinibatchSource([FromData(dict(x=X))], max_sweeps=1, randomize=False)

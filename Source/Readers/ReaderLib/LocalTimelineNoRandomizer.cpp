@@ -10,7 +10,7 @@ namespace CNTK {
 
 LocalTimelineNoRandomizer::LocalTimelineNoRandomizer(DataDeserializerPtr deserializer, bool multithreadedGetNextSequences, size_t maxNumberOfInvalidSequences)
 : Base(deserializer, multithreadedGetNextSequences, maxNumberOfInvalidSequences),
-  m_currentChunkPosition(ChunkIdMax),
+  m_currentChunkPosition(0),
   m_currentSequencePosition(0)
 {
 }

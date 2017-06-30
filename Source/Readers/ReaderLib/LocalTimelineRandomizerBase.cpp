@@ -49,7 +49,7 @@ void LocalTimelineRandomizerBase::StartEpoch(const EpochConfiguration& config)
 
     // Fill the first window remembering the state,
     // the window is expandable.
-    m_currentState = GetState();
+    m_currentState = GetInnerState();
     RefillSequenceWindow();
 }
 
@@ -63,7 +63,7 @@ void LocalTimelineRandomizerBase::MoveToNextSequence()
 
     assert(m_window.m_sequencePosition + 1 == m_window.m_sequences.size());
 
-    m_currentState = GetState();
+    m_currentState = GetInnerState();
     RefillSequenceWindow();
 }
 
@@ -171,10 +171,12 @@ Sequences LocalTimelineRandomizerBase::GetNextSequences(size_t, size_t sampleCou
 
 Dictionary LocalTimelineRandomizerBase::GetState()
 {
-    m_currentState[L"sweepIndex"] = m_sweepIndex;
-    m_currentState[L"currentSequencePositionInWindow"] = m_window.m_sequencePosition;
-    m_currentState[L"numberOfSamplesSeenSoFar"] = m_numberOfSamplesSeenSoFar;
-    return m_currentState;
+    Dictionary state;
+    state[L"sweepIndex"] = m_sweepIndex;
+    state[L"currentSequencePositionInWindow"] = m_window.m_sequencePosition;
+    state[L"numberOfSamplesSeenSoFar"] = m_numberOfSamplesSeenSoFar;
+    state[L"innerState"] = m_currentState;
+    return state;
 }
 
 void LocalTimelineRandomizerBase::SetState(const Dictionary& state)
@@ -183,7 +185,7 @@ void LocalTimelineRandomizerBase::SetState(const Dictionary& state)
     m_numberOfSamplesSeenSoFar = state[L"numberOfSamplesSeenSoFar"].Value<size_t>();
     m_window.m_sequencePosition = state[L"currentSequencePositionInWindow"].Value<size_t>();
 
-    SetInnerState(state);
+    SetInnerState(state[L"innerState"].Value<Dictionary>());
     RefillSequenceWindow();
 }
 

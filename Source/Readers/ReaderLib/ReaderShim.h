@@ -88,9 +88,12 @@ public:
 
     virtual size_t GetNumParallelSequencesForFixingBPTTMode() override;
 
+    // Legacy v1 API
     virtual size_t GetCurrentSamplePosition() override;
-
     void SetCurrentSamplePosition(size_t currentSamplePosition);
+
+    Dictionary GetState();
+    void SetState(const Dictionary& state);
 
     void SetConfiguration(const ReaderConfiguration& config, const std::map<std::wstring, int>& inputDescriptions);
 
@@ -156,10 +159,7 @@ private:
     // Device id.
     int m_deviceId;
 
-    // Current sample position of the reader on the global timeline.
-    // We have to remember the value locally before starting prefetch.
-    // The value is updated only from the main thread (in StartEpoch/GetMinibatch)
-    size_t m_currentSamplePosition;
+    Dictionary m_currentState;
 
     static void FillMatrixFromStream(
         StorageFormat type,

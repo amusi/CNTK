@@ -81,13 +81,12 @@ CompositeDataReader::CompositeDataReader(const ConfigParameters& config) :
     m_precision = config("precision", "float");
 
     // Creating deserializers.
-    // TODO: Currently the primary deserializer defines the corpus. The logic will be moved to CorpusDescriptor class.
-    CreateDeserializers(config);
-
+    bool composable = CreateDeserializers(config);
     if (m_deserializers.empty())
-    {
         InvalidArgument("Could not find deserializers in the reader config.");
-    }
+
+    if (!composable && m_deserializers.size() > 1)
+        InvalidArgument("Currently user defined deserializers do not support composability. Please specify a single deserializer.");
 
     DataDeserializerPtr deserializer = m_deserializers.front();
     if (m_deserializers.size() > 1)
@@ -111,11 +110,8 @@ CompositeDataReader::CompositeDataReader(const ConfigParameters& config) :
     // i.e. decompression of images.
     bool multiThreadedDeserialization = config(L"multiThreadedDeserialization", ContainsDeserializer(config, L"ImageDeserializer"));
 
-    if ((bool)config(L"python", false))
+    if (!composable) // Pick up simple interface.
     {
-        if (m_deserializers.size() != 1)
-            RuntimeError("Python simple deserializers currently do not support composition");
-
         if (randomize)
             m_sequenceEnumerator = std::make_shared<LocalTimelineBlockRandomizer>(deserializer,
                 config(L"randomizationWindow", requestDataSize), GetRandomSeed(config),
@@ -226,7 +222,7 @@ std::vector<StreamInformation> CompositeDataReader::GetStreamDescriptions()
 // deserializers = [
 //        [ type = "ImageDataDeserializer" module = "ImageReader" ...]
 //        [ type = "CNTKTextFormatDeserializer" module = "CNTKTextFormatReader" ...]
-void CompositeDataReader::CreateDeserializers(const ConfigParameters& readerConfig)
+bool CompositeDataReader::CreateDeserializers(const ConfigParameters& readerConfig)
 {
     argvector<ConfigValue> deserializerConfigs =
         readerConfig(L"deserializers", ConfigParameters::Array(argvector<ConfigValue>(vector<ConfigValue> {})));
@@ -234,6 +230,7 @@ void CompositeDataReader::CreateDeserializers(const ConfigParameters& readerConf
     assert(m_deserializers.empty());
 
     auto traceLevel = readerConfig.Find("traceLevel");
+    bool composable = true;
 
     bool primary = true;  // Currently, the first deserializer becomes primary - it drives chunking.
     for (size_t i = 0; i < deserializerConfigs.size(); ++i)
@@ -247,10 +244,12 @@ void CompositeDataReader::CreateDeserializers(const ConfigParameters& readerConf
             p.Insert("traceLevel", traceLevel);
         }
 
+        composable &= p(L"composable", true);
         DataDeserializerPtr d = CreateDeserializer(p, primary);
         primary = false;
         m_deserializers.push_back(d);
     }
+    return composable;
 }
 
 // Creates a particular deserializer based on the config: its loads the external module and calls CreateDeserializer

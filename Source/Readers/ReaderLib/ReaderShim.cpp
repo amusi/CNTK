@@ -31,7 +31,6 @@ ReaderShim<ElemType>::ReaderShim() :
     m_currentDataTransferIndex(0),
     m_endOfEpoch(false),
     m_endOfSweep(false),
-    m_currentSamplePosition(0),
     m_reader(nullptr),
     m_factory(nullptr)
 {
@@ -103,7 +102,7 @@ void ReaderShim<ElemType>::StartDistributedMinibatchLoop(
 template <class ElemType>
 void ReaderShim<ElemType>::SetCurrentSamplePosition(size_t currentSamplePosition)
 {
-    if (m_currentSamplePosition == currentSamplePosition)
+    if (GetCurrentSamplePosition() == currentSamplePosition)
         return;
 
     // Make sure there are no outstanding reads.
@@ -116,9 +115,12 @@ void ReaderShim<ElemType>::SetCurrentSamplePosition(size_t currentSamplePosition
         m_dataTransferers[m_currentDataTransferIndex]->WaitForCopyCPUToGPU();
 
     // Set current position.
-    m_reader->SetCurrentSamplePosition(currentSamplePosition);
+    Dictionary state;
+    state[L"globalSamplePosition"] = currentSamplePosition;
+    m_reader->SetState(state);
     m_endOfEpoch = false;
-    m_currentSamplePosition = m_reader->GetCurrentSamplePosition();
+
+    m_currentState = m_reader->GetState();
 }
 
 template <class ElemType>
@@ -134,7 +136,7 @@ void ReaderShim<ElemType>::SetConfiguration(const ReaderConfiguration& config, c
         m_dataTransferers[m_currentDataTransferIndex]->WaitForCopyCPUToGPU();
 
     m_reader->SetConfiguration(config, inputDescriptions);
-    m_reader->SetCurrentSamplePosition(m_currentSamplePosition);
+    m_reader->SetState(m_currentState);
 }
 
 template <class ElemType>
@@ -188,7 +190,8 @@ void ReaderShim<ElemType>::StartEpoch(const EpochConfiguration& config, const st
 
     m_endOfEpoch = false;
     m_reader->StartEpoch(config, inputDescriptions);
-    m_currentSamplePosition = m_reader->GetCurrentSamplePosition();
+
+    m_currentState = m_reader->GetState();
 }
 
 template <class ElemType>
@@ -259,7 +262,7 @@ bool ReaderShim<ElemType>::GetMinibatch(StreamMinibatchInputs& matrices)
     // Ok, prefetch is done.
 
     // Let's update our sample position.
-    m_currentSamplePosition = m_reader->GetCurrentSamplePosition();
+    m_currentState = m_reader->GetState();
 
     m_endOfEpoch = result.m_isEndOfEpoch;
     m_endOfSweep = result.m_isEndOfSweep;
@@ -433,7 +436,33 @@ size_t ReaderShim<ElemType>::GetNumParallelSequencesForFixingBPTTMode()
 template <class ElemType>
 size_t ReaderShim<ElemType>::GetCurrentSamplePosition()
 {
-    return m_currentSamplePosition;
+    return m_currentState[L"globalSamplePosition"].Value<size_t>();
+}
+template <class ElemType>
+Dictionary ReaderShim<ElemType>::GetState()
+{
+    return m_currentState;
+}
+
+template <class ElemType>
+void ReaderShim<ElemType>::SetState(const Dictionary& state)
+{
+    if (m_currentState == state)
+        return;
+
+    // Make sure there are no outstanding reads.
+    if (m_prefetchTask.valid())
+        m_prefetchTask.wait();
+
+    // Let's check that there is no outstanding copies.
+    // Wait on all events if there are any pending copy operations in flight.
+    if (m_dataTransferers[m_currentDataTransferIndex])
+        m_dataTransferers[m_currentDataTransferIndex]->WaitForCopyCPUToGPU();
+
+    // Set current position.
+    m_reader->SetState(state);
+    m_currentState = m_reader->GetState();
+    m_endOfEpoch = false;
 }
 
 template class ReaderShim<float>;
