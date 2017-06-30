@@ -22,6 +22,8 @@
 #include "ConfigUtil.h"
 #include "StringUtil.h"
 #include "ReaderConstants.h"
+#include "LocalTimelineNoRandomizer.h"
+#include "LocalTimelineBlockRandomizer.h"
 
 namespace CNTK {
 
@@ -108,45 +110,59 @@ CompositeDataReader::CompositeDataReader(const ConfigParameters& config) :
     // It makes sense to put it to true for cases when deserialization is CPU intensive,
     // i.e. decompression of images.
     bool multiThreadedDeserialization = config(L"multiThreadedDeserialization", ContainsDeserializer(config, L"ImageDeserializer"));
-    if (randomize)
+
+    if ((bool)config(L"python", false))
     {
-        // By default randomizing the whole data set.
-        size_t randomizationWindow = requestDataSize;
+        if (m_deserializers.size() != 1)
+            RuntimeError("Python simple deserializers currently do not support composition");
 
-        // Currently in case of images, a single chunk is a single image. So no need to randomize, chunks will be randomized anyway.
-        if (ContainsDeserializer(config, L"ImageDeserializer") && m_deserializers.size() == 1)
-        {
-            randomizationWindow = 1;
-            m_packingMode = PackingMode::sample;
-        }
-
-        randomizationWindow = config(L"randomizationWindow", randomizationWindow);
-        bool sampleBasedRandomizationWindow = config(L"sampleBasedRandomizationWindow", true);
-
-        if (ContainsDeserializer(config, L"CNTKTextFormatDeserializer") && !config.ExistsCurrent(L"randomizationWindow"))
-        {
-            if (!config.ExistsCurrent(L"sampleBasedRandomizationWindow") || // sampleBasedRandomizationWindow is not specified
-                !sampleBasedRandomizationWindow) // randomization window is in chunks
-            {
-                sampleBasedRandomizationWindow = false;
-                size_t chunkSizeBytes = config(L"chunkSizeInBytes", g_32MB); // 32 MB by default
-                randomizationWindow = g_4GB / chunkSizeBytes; // ~ 4 GB disk space worth of chunks
-                // TODO: decrease randomization window if m_deserializers.size() > 1 ?
-            }
-            else
-            {
-                // config explicitly says to use a sample-based window, but does not specify its size.
-                LogicError("'sampleBasedRandomizationWindow' (== 'true') requires that the 'randomizationWindow' is explicitly specified.");
-            }
-        }
-
-        bool shouldPrefetch = true;
-        m_sequenceEnumerator = std::make_shared<BlockRandomizer>(verbosity, randomizationWindow, deserializer, shouldPrefetch, 
-            multiThreadedDeserialization, maxErrors, sampleBasedRandomizationWindow, GetRandomSeed(config));
+        if (randomize)
+            m_sequenceEnumerator = std::make_shared<LocalTimelineBlockRandomizer>(deserializer,
+                config(L"randomizationWindow", requestDataSize), GetRandomSeed(config),
+                multiThreadedDeserialization, maxErrors);
+        else
+            m_sequenceEnumerator = std::make_shared<LocalTimelineNoRandomizer>(deserializer, multiThreadedDeserialization, maxErrors);
     }
     else
     {
-        m_sequenceEnumerator = std::make_shared<NoRandomizer>(deserializer, multiThreadedDeserialization, maxErrors);
+        if (randomize)
+        {
+            // By default randomizing the whole data set.
+            size_t randomizationWindow = requestDataSize;
+
+            // Currently in case of images, a single chunk is a single image. So no need to randomize, chunks will be randomized anyway.
+            if (ContainsDeserializer(config, L"ImageDeserializer") && m_deserializers.size() == 1)
+            {
+                randomizationWindow = 1;
+                m_packingMode = PackingMode::sample;
+            }
+
+            randomizationWindow = config(L"randomizationWindow", randomizationWindow);
+            bool sampleBasedRandomizationWindow = config(L"sampleBasedRandomizationWindow", true);
+
+            if (ContainsDeserializer(config, L"CNTKTextFormatDeserializer") && !config.ExistsCurrent(L"randomizationWindow"))
+            {
+                if (!config.ExistsCurrent(L"sampleBasedRandomizationWindow") || // sampleBasedRandomizationWindow is not specified
+                    !sampleBasedRandomizationWindow) // randomization window is in chunks
+                {
+                    sampleBasedRandomizationWindow = false;
+                    size_t chunkSizeBytes = config(L"chunkSizeInBytes", g_32MB); // 32 MB by default
+                    randomizationWindow = g_4GB / chunkSizeBytes; // ~ 4 GB disk space worth of chunks
+                                                                  // TODO: decrease randomization window if m_deserializers.size() > 1 ?
+                }
+                else
+                {
+                    // config explicitly says to use a sample-based window, but does not specify its size.
+                    LogicError("'sampleBasedRandomizationWindow' (== 'true') requires that the 'randomizationWindow' is explicitly specified.");
+                }
+            }
+
+            bool shouldPrefetch = true;
+            m_sequenceEnumerator = std::make_shared<BlockRandomizer>(verbosity, randomizationWindow, deserializer, shouldPrefetch,
+                multiThreadedDeserialization, maxErrors, sampleBasedRandomizationWindow, GetRandomSeed(config));
+        }
+        else
+            m_sequenceEnumerator = std::make_shared<NoRandomizer>(deserializer, multiThreadedDeserialization, maxErrors);
     }
 
     // In case when there are transforms, applying them to the data.
