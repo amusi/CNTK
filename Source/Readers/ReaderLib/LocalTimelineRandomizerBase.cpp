@@ -64,6 +64,7 @@ void LocalTimelineRandomizerBase::MoveToNextSequence()
     assert(m_window.m_sequencePosition + 1 == m_window.m_sequences.size());
 
     m_currentState = GetInnerState();
+    m_window.m_sequencePosition = 0;
     RefillSequenceWindow();
 }
 

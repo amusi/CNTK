@@ -29,8 +29,7 @@ public:
 
     virtual std::vector<StreamInformation> GetStreamDescriptions() const override
     {
-        static auto streams = m_deserializer->GetStreamDescriptions();
-        return streams;
+        return m_deserializer->GetStreamDescriptions();
     }
 
     Dictionary GetState() override;

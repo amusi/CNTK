@@ -1081,25 +1081,24 @@ def test_prefetch_with_unpacking(tmpdir):
             empty = True
 
 def test_inmemory_deserializer_dense_sample():
-    import pdb; pdb.set_trace()
     N = 5
     X = np.arange(3*N).reshape(N,3).astype(np.float32) # 5 rows of 3 values
-    s = MinibatchSource([FromData(dict(x=X))], max_sweeps=1, randomize=False)
+    mbs = MinibatchSource([FromData(dict(x=X))], max_sweeps=1, randomize=False)
 
-    mb = s.next_minibatch(3) # get a minibatch of 3
-    data = mb[s.streams['x']].data.asarray()
+    mb = mbs.next_minibatch(3) # get a minibatch of 3
+    data = mb[mbs.streams['x']].data.asarray()
     assert (data == np.array([[[ 0.,  1.,  2.]],
                               [[ 3.,  4.,  5.]],
                               [[ 6.,  7.,  8.]]],
                              dtype=np.float32)).all()
 
-    mb = s.next_minibatch(3) # the sweep is crossed, 2 samples left
-    data = mb[s.streams['x']].data.asarray()
+    mb = mbs.next_minibatch(3) # the sweep is crossed, 2 samples left
+    data = mb[mbs.streams['x']].data.asarray()
     assert (data == np.array([[[  9.,  10.,  11.]],
                               [[ 12.,  13.,  14.]]],
                              dtype=np.float32)).all()
 
-    mb = s.next_minibatch(3) # no more data
+    mb = mbs.next_minibatch(3) # no more data
     assert mb == {}
 
 def test_inmemory_deserializer_sparse_sample():
@@ -1112,21 +1111,21 @@ def test_inmemory_deserializer_sparse_sample():
                                           [4, 0, 0], 
                                           [0, 5, 0]], dtype=np.float32))
 
-    s = MinibatchSource([FromData(dict(x=X, y=Y))], randomize=False)
-    mb = s.next_minibatch(3)
-    result = mb[s.streams['y']].data.asarray()
+    mbs = MinibatchSource([FromData(dict(x=X, y=Y))], randomize=False)
+    mb = mbs.next_minibatch(3)
+    result = mb[mbs.streams['y']].data.asarray()
     assert (result == np.array([[[ 1, 0, 0]],
                                 [[ 0, 2, 0]],
                                 [[ 0, 0, 3]]], dtype=np.float32)).all()
 
-    mb = s.next_minibatch(3)
-    result = mb[s.streams['y']].data.asarray()
+    mb = mbs.next_minibatch(3)
+    result = mb[mbs.streams['y']].data.asarray()
     assert (result == np.array([[[ 4, 0, 0]],
                                 [[ 0, 5, 0]],
                                 [[ 1, 0, 0]]], dtype=np.float32)).all()
 
-    mb = s.next_minibatch(2)
-    result = mb[s.streams['y']].data.asarray()
+    mb = mbs.next_minibatch(2)
+    result = mb[mbs.streams['y']].data.asarray()
     assert (result == np.array([[[ 0, 2, 0]],
                                 [[ 0, 0, 3]]], dtype=np.float32)).all()
 
@@ -1137,10 +1136,10 @@ def test_inmemory_deserializer_sequences():
     XX = [np.array([1,3,2], np.float32), np.array([4,1], np.float32)]  # 2 sequences
     YY = [sp.csr_matrix(np.array([[0,1],[1,0],[1,0]], np.float32)), sp.csr_matrix(np.array([[1,0],[1,0]], np.float32))]
 
-    s = MinibatchSource([FromData(dict(xx=(XX, Ct.Sequence[Ct.tensor]), yy=(YY, Ct.Sequence[Ct.tensor])))], randomize=False)
-    mb = s.next_minibatch(3)
-    result = mb[s.streams['xx']].data.asarray()
+    mbs = MinibatchSource([FromData(dict(xx=(XX, Ct.Sequence[Ct.tensor]), yy=(YY, Ct.Sequence[Ct.tensor])))], randomize=False)
+    mb = mbs.next_minibatch(3)
+    result = mb[mbs.streams['xx']].data.asarray()
     assert (result == np.array([[ 1, 3, 2 ]], dtype=np.float32)).all()
 
-    result = mb[s.streams['yy']].data.asarray()
+    result = mb[mbs.streams['yy']].data.asarray()
     assert (result == np.array([[[ 0, 1 ], [ 1, 0], [1, 0]]], dtype=np.float32)).all()

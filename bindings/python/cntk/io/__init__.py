@@ -1155,12 +1155,12 @@ class UserDeserializer(cntk_py.SwigDataDeserializer):
         raise NotImplementedError
 
     def _stream_infos(self, infos=None):
+        self._last_chunk = None
+        self._last_chunk_id = None
         inner = self.stream_infos()
         infos.extend(inner)
         streams = {si.m_name: si for si in inner}
         self.streams = Record(**streams)
-        self._last_chunk = None
-        self._last_chunk_id = None
 
     def _chunk_infos(self, infos=None):
         inner = []
