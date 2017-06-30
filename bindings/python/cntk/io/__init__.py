@@ -412,6 +412,7 @@ class StreamInformation(cntk_py.StreamInformation):
         self.m_storage_format = StreamInformation._storage[storage_format]
         self.m_element_type = sanitize_dtype_cntk(dtype)
         self.m_sample_layout = cntk_py.NDShape(shape)
+        self.sample_shape = shape
 
     @property
     def name(self):
@@ -1102,7 +1103,6 @@ def sequence_to_cntk_text_format(seq_idx, alias_tensor_map):
 
     return '\n'.join(lines)
 
-
 class UserDeserializer(cntk_py.SwigDataDeserializer):
     '''
     User deserializer is a base class for all user defined deserializers.
@@ -1123,7 +1123,6 @@ class UserDeserializer(cntk_py.SwigDataDeserializer):
     def __init__(self):
         super(UserDeserializer, self).__init__()
 
-    @property
     def stream_infos(self):
         '''
         Should return a list of meta information :class:`StreamInformation` about all 
@@ -1134,7 +1133,6 @@ class UserDeserializer(cntk_py.SwigDataDeserializer):
         '''
         raise NotImplementedError
 
-    @property
     def chunk_infos(self):
         '''
         Array of unique chunk ids.
@@ -1253,28 +1251,36 @@ class InMemoryChunk(UserChunk):
         data (numpy array or csr matrix): actual data of the chunk
         stream_infos (array of tuple(:class:`StreamInformation`, isSequence)): information about streams of the corresponding deserializer
     '''
-    def __init__(self, chunk_id, data, stream_infos, is_sequence, num_sequences):
+    def __init__(self, chunk_id, data, stream_infos):
         super(InMemoryChunk, self).__init__(stream_infos)
         self._data = data
-        self._stream_infos = stream_infos
+        self._streams = stream_infos
         self._chunk_id = chunk_id
-        self._is_sequence = is_sequence
-        self._num_sequences = num_sequences
 
     def sequence_infos(self):
         # prefill result with sequence information from the first stream.
+        first_data = self._data[self._streams[0].name];
+        num_sequences = len(first_data) if isinstance(first_data, list) else first_data.shape[0]
+
         r = [SequenceInformation(index_in_chunk=i, number_of_samples=1,
-                                 chunk_id=self._chunk_id, id=i) for i in range(self._num_sequences)]
-        # update number of samples
-        for s in self._stream_infos:
-            for i in range(self._num_sequences):
-                r[i].m_number_of_samples = max(r[i].m_number_of_samples, 
-                                               self._data[s.name][i].shape[0] if self._is_sequence[s.name] else 1)
+                                 chunk_id=self._chunk_id, id=i) for i in range(num_sequences)]
+
+        # update number of samples in sequence to max
+        for stream in self._streams:
+            data = self._data[stream.name]
+            current_num_sequences = len(data) if isinstance(data, list) else data.shape[0]
+            if current_num_sequences != num_sequences:
+                raise ValueError('Number of sequences inside the chunk should match')
+            is_sequence = (data[0].shape != stream.sample_shape)
+            if not is_sequence: # in case of samples no need to update the max lengh
+                continue
+            data = self._data[stream.name]
+            for i in range(current_num_sequences):
+                r[i].m_number_of_samples = max(r[i].m_number_of_samples, data[i].shape[0])
         return r
 
-
     def get_sequence(self, sequence_id):     
-        return [self._data[s.name][sequence_id] for s in self._stream_infos]
+        return [self._data[s.name][sequence_id] for s in self._streams]
 
 class FromData(UserDeserializer):
     '''
@@ -1415,4 +1421,4 @@ class FromData(UserDeserializer):
     def get_chunk(self, chunk_id):
         if chunk_id != 0:
             raise ValueError("Unexpected chunk id")
-        return InMemoryChunk(0, self._data, self.stream_infos(), self._is_sequence, self._num_sequences)
+        return InMemoryChunk(0, self._data, self.stream_infos())
