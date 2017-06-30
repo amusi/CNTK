@@ -70,6 +70,17 @@ private:
     }
 
 protected:
+    // Struct that describes a window of sequences 
+    // that are currently processed
+    struct SequenceWindow
+    {
+        SequenceWindow() : m_sequencePosition(0) {}
+
+        std::map<ChunkIdType, ChunkPtr> m_dataChunks;
+        std::vector<SequenceDescription> m_sequences;
+        size_t m_sequencePosition;
+    };
+
     const static SequenceDescription s_endOfSweep; // Sequence indicating end of the sweep.
 
     DataDeserializerPtr m_deserializer;
@@ -84,20 +95,16 @@ protected:
     // Original chunk descriptions.
     ChunkDescriptions m_originalChunkDescriptions;
 
-    // Current chunk data, should always contain
-    // chunks that are returned by the GetNextSequenceDescription function.
-    std::map<ChunkIdType, ChunkPtr> m_chunks;
-
     // Current window of sequence descriptions.
-    std::vector<SequenceDescription> m_sequenceWindow;
+    SequenceWindow m_window;
 
     // Current sequence position the randomizer works with.
-    size_t m_currentSequencePositionInWindow;
     size_t m_sweepIndex;
     size_t m_numberOfSamplesSeenSoFar;
 
-    // Temp buffer to avoid allocations.
+    // Minibatch sequences, and minibatch chunks.
     std::vector<SequenceDescription> m_sequenceBuffer;
+    std::map<ChunkIdType, ChunkPtr> m_chunkBuffer;
 
     // Helper class for removing invalid sequences.
     SequenceCleaner m_cleaner;

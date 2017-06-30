@@ -55,19 +55,16 @@ void LocalTimelineRandomizerBase::StartEpoch(const EpochConfiguration& config)
 
 void LocalTimelineRandomizerBase::MoveToNextSequence()
 {
-    if (m_currentSequencePositionInWindow + 1 < m_sequenceWindow.size())
+    if (m_window.m_sequencePosition + 1 < m_window.m_sequences.size())
     {
-        m_currentSequencePositionInWindow++;
+        ++m_window.m_sequencePosition;
         return;
     }
 
-    assert(m_currentSequencePositionInWindow == m_sequenceWindow.size());
-    m_sequenceWindow.clear();
+    assert(m_window.m_sequencePosition + 1 == m_window.m_sequences.size());
 
     m_currentState = GetState();
     RefillSequenceWindow();
-
-    m_currentSequencePositionInWindow = 0;
 }
 
 // Gets next sequences not exceeding local and global samples.
@@ -78,15 +75,16 @@ void LocalTimelineRandomizerBase::GetNextSequenceDescriptions(size_t maxSampleCo
     if (maxSampleCount > std::numeric_limits<int>::max())
         RuntimeError("Local size of the minibatch cannot exceed max int.");
 
-    assert(m_sequenceWindow.size() != 0);
+    assert(m_window.m_sequences.size() != 0);
 
     size_t samplesLoaded = 0;
     bool atLeastOneSequenceNeeded = true;
 
     m_sequenceBuffer.clear();
+    m_chunkBuffer.clear();
     while (samplesLoaded < maxSampleCount && !IsEndReached())
     {
-        const SequenceDescription& sequence = m_sequenceWindow[m_currentSequencePositionInWindow];
+        const SequenceDescription& sequence = m_window.m_sequences[m_window.m_sequencePosition];
         if (IsEndOfSweep(sequence))
         {
             m_sweepIndex++;
@@ -104,6 +102,9 @@ void LocalTimelineRandomizerBase::GetNextSequenceDescriptions(size_t maxSampleCo
 
         // Ok good to add it to the result.
         m_sequenceBuffer.push_back(sequence);
+        if (m_chunkBuffer.find(sequence.m_chunkId) == m_chunkBuffer.end())
+            m_chunkBuffer[sequence.m_chunkId] = m_window.m_dataChunks[sequence.m_chunkId];
+
         samplesLoaded += sequenceLength;
         atLeastOneSequenceNeeded = false;
 
@@ -135,32 +136,13 @@ Sequences LocalTimelineRandomizerBase::GetNextSequences(size_t, size_t sampleCou
 
     result.m_data.resize(GetStreamDescriptions().size(), std::vector<SequenceDataPtr>(m_sequenceBuffer.size()));
 
-    // Collect all the chunks that we need
-    std::map<ChunkIdType, ChunkPtr> chunks;
-    for (const auto& s : m_sequenceBuffer)
-    {
-        if (chunks.find(s.m_chunkId) != chunks.end())
-            continue;
-
-        auto old = m_chunks.find(s.m_chunkId);
-        if (old != m_chunks.end())
-            chunks.insert(std::make_pair(s.m_chunkId, old->second));
-        else
-            chunks[s.m_chunkId] = m_deserializer->GetChunk(s.m_chunkId);
-    }
-
-    // swap current chunks with new ones:
-    m_chunks.swap(chunks);
-
     auto process = [&](int i) -> void {
         std::vector<SequenceDataPtr> sequence;
         const auto& sequenceDescription = m_sequenceBuffer[i];
 
-        auto it = m_chunks.find(sequenceDescription.m_chunkId);
-        if (it == m_chunks.end())
-        {
+        auto it = m_chunkBuffer.find(sequenceDescription.m_chunkId);
+        if (it == m_chunkBuffer.end())
             LogicError("Invalid chunk requested.");
-        }
 
         it->second->GetSequence(sequenceDescription.m_indexInChunk, sequence);
         for (int j = 0; j < GetStreamDescriptions().size(); ++j)
@@ -190,7 +172,7 @@ Sequences LocalTimelineRandomizerBase::GetNextSequences(size_t, size_t sampleCou
 Dictionary LocalTimelineRandomizerBase::GetState()
 {
     m_currentState[L"sweepIndex"] = m_sweepIndex;
-    m_currentState[L"currentSequencePositionInWindow"] = m_currentSequencePositionInWindow;
+    m_currentState[L"currentSequencePositionInWindow"] = m_window.m_sequencePosition;
     m_currentState[L"numberOfSamplesSeenSoFar"] = m_numberOfSamplesSeenSoFar;
     return m_currentState;
 }
@@ -199,11 +181,9 @@ void LocalTimelineRandomizerBase::SetState(const Dictionary& state)
 {
     m_sweepIndex = state[L"sweepIndex"].Value<size_t>();
     m_numberOfSamplesSeenSoFar = state[L"numberOfSamplesSeenSoFar"].Value<size_t>();
-    m_currentSequencePositionInWindow = state[L"currentSequencePositionInWindow"].Value<size_t>();
+    m_window.m_sequencePosition = state[L"currentSequencePositionInWindow"].Value<size_t>();
 
     SetInnerState(state);
-
-    m_sequenceWindow.clear();
     RefillSequenceWindow();
 }
 

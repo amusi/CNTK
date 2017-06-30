@@ -17,31 +17,32 @@ LocalTimelineNoRandomizer::LocalTimelineNoRandomizer(DataDeserializerPtr deseria
 
 void LocalTimelineNoRandomizer::RefillSequenceWindow()
 {
-    auto chunkId = m_originalChunkDescriptions[m_currentChunkPosition].m_id;
-    if (m_chunks.find(chunkId) == m_chunks.end())
-        m_chunks[chunkId] = m_deserializer->GetChunk(chunkId);
+    m_window.m_sequences.clear();
+    m_window.m_dataChunks.clear();
 
-    m_deserializer->GetSequencesForChunk(m_currentChunkPosition, m_sequenceWindow);
+    auto chunkId = m_originalChunkDescriptions[m_currentChunkPosition].m_id;
+    m_window.m_dataChunks[chunkId] = m_deserializer->GetChunk(chunkId);
+    m_deserializer->GetSequencesForChunk(m_currentChunkPosition, m_window.m_sequences);
 
     if (m_config.m_numberOfWorkers > 1)
     {
         // Decimate according to the position.
         size_t currentSequencePosition = m_currentSequencePosition;
         size_t currentInputIndex = 0;
-        for (size_t i = 0; i < m_sequenceWindow.size(); ++i, ++currentSequencePosition)
+        for (size_t i = 0; i < m_window.m_sequences.size(); ++i, ++currentSequencePosition)
         {
             if (currentSequencePosition % m_config.m_numberOfWorkers == m_config.m_workerRank)
-                std::swap(m_sequenceWindow[currentInputIndex++], m_sequenceWindow[i]);
+                std::swap(m_window.m_sequences[currentInputIndex++], m_window.m_sequences[i]);
         }
 
-        m_currentSequencePosition += m_sequenceWindow.size();
-        m_sequenceWindow.erase(m_sequenceWindow.begin() + currentInputIndex);
+        m_currentSequencePosition += m_window.m_sequences.size();
+        m_window.m_sequences.erase(m_window.m_sequences.begin() + currentInputIndex);
     }
 
     // If last chunk, add marker.
     if (m_currentChunkPosition == m_originalChunkDescriptions.size() - 1)
     {
-        m_sequenceWindow.push_back(s_endOfSweep);
+        m_window.m_sequences.push_back(s_endOfSweep);
         m_currentSequencePosition = 0;
     }
 

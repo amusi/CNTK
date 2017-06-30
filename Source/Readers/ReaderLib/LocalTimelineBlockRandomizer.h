@@ -10,6 +10,7 @@
 #include "DataDeserializer.h"
 #include "ReaderUtil.h"
 #include "LocalTimelineRandomizerBase.h"
+#include <tuple>
 
 namespace CNTK {
 
@@ -36,17 +37,16 @@ private:
     const size_t m_randomizationRange;
     const size_t m_seedOffset;
 
-    // Randomized chunk descriptions.
-    ChunkDescriptions m_chunkDescriptions;
-
     // Current chunk position that the randomizer works with.
     ChunkIdType m_globalChunkPosition;
 
     std::mt19937_64 m_rng;
 
-    std::future<void> m_prefetch;
-    std::vector<std::pair<ChunkDescription, ChunkPtr>> m_prefetchedChunks;
+    // Randomized chunk descriptions.
     ChunkDescriptions m_prefetchedChunkDescriptions;
+
+    std::future<void> m_prefetch;
+    std::vector<std::tuple<ChunkDescription, ChunkPtr, std::vector<SequenceDescription>>> m_prefetchedChunks;
 };
 
 }

@@ -8,6 +8,7 @@
 
 #include "LocalTimelineBlockRandomizer.h"
 #include "RandomOrdering.h"
+#include <tuple>
 
 namespace CNTK {
 
@@ -22,9 +23,9 @@ LocalTimelineBlockRandomizer::LocalTimelineBlockRandomizer(
   m_seedOffset(seedOffset),
   m_globalChunkPosition(0)
 {
-    m_chunkDescriptions = m_originalChunkDescriptions;
+    m_prefetchedChunkDescriptions = m_originalChunkDescriptions;
     m_rng.seed((unsigned long)m_sweepIndex + m_seedOffset);
-    Microsoft::MSR::CNTK::RandomShuffleMT(m_chunkDescriptions, m_rng);
+    Microsoft::MSR::CNTK::RandomShuffleMT(m_prefetchedChunkDescriptions, m_rng);
 }
 
 void LocalTimelineBlockRandomizer::PrefetchChunks()
@@ -48,12 +49,31 @@ void LocalTimelineBlockRandomizer::PrefetchChunks()
             }
 
             auto desc = m_prefetchedChunkDescriptions[position];
-            if (position % m_config.m_numberOfWorkers == m_config.m_workerRank &&
-                m_chunks.find(desc.m_id) == m_chunks.end())
+            if (position % m_config.m_numberOfWorkers == m_config.m_workerRank) // Need to add to the window
             {
-                ChunkPtr data = m_deserializer->GetChunk(desc.m_id);
-                m_prefetchedChunks.push_back(std::make_pair(desc, data));
+                std::vector<SequenceDescription> sequences;
+                ChunkPtr data;
+                if (m_window.m_dataChunks.find(desc.m_id) == m_window.m_dataChunks.end())
+                {
+                    // Query deserializer.
+                    data = m_deserializer->GetChunk(desc.m_id);
+                    m_deserializer->GetSequencesForChunk(desc.m_id, sequences);
+                }
+                else // Simple copy
+                {
+                    for (size_t i = 0; i < m_window.m_sequences.size(); ++i)
+                        if (m_window.m_sequences[i].m_chunkId == desc.m_id)
+                            sequences.push_back(m_window.m_sequences[i]);
+                    data = m_window.m_dataChunks[desc.m_id];
+                }
+
+                m_prefetchedChunks.push_back(std::make_tuple(desc, data, sequences));
                 --range;
+            }
+            else
+            {
+                // Empty, we do not need this except for tracking the current 
+                m_prefetchedChunks.push_back(std::make_tuple(ChunkDescription{}, nullptr, std::vector<SequenceDescription>{}));
             }
 
             position = (position + 1) % m_originalChunkDescriptions.size();
@@ -68,37 +88,24 @@ void LocalTimelineBlockRandomizer::RefillSequenceWindow()
 
     m_prefetch.wait();
 
-    auto sweepIndex = m_sweepIndex;
+    m_window.m_sequences.clear();
+    m_window.m_dataChunks.clear();
 
-    // Actually moving cursors forward, if the data is small
-    // the sweep boundary can be crossed several times.
-    size_t range = m_randomizationRange;
-    while(range > 0)
+    for (const auto& c : m_prefetchedChunks)
     {
         ++m_globalChunkPosition;
 
         auto sweepPosition = m_globalChunkPosition % m_originalChunkDescriptions.size();
         if (sweepPosition % m_config.m_numberOfWorkers == m_config.m_workerRank)
         {
-            auto desc = m_chunkDescriptions[sweepPosition];
-            m_deserializer->GetSequencesForChunk(desc.m_id, m_sequenceWindow);
-            --range;
+            m_window.m_sequences.insert(m_window.m_sequences.end(), std::get<2>(c).begin(), std::get<2>(c).end());
+            m_window.m_dataChunks.insert(std::make_pair(std::get<0>(c).m_id, std::get<1>(c)));
         }
 
         // Last chunk
-        if (sweepPosition == m_chunkDescriptions.size() - 1)
-        {
-            m_sequenceWindow.push_back(s_endOfSweep);
-            sweepIndex++;
-            m_chunkDescriptions = m_originalChunkDescriptions;
-            m_rng.seed((unsigned long)sweepIndex + m_seedOffset);
-            Microsoft::MSR::CNTK::RandomShuffleMT(m_chunkDescriptions, m_rng);
-        }
+        if (sweepPosition == m_originalChunkDescriptions.size() - 1)
+            m_window.m_sequences.push_back(s_endOfSweep);
     }
-
-    // Chunks are updated only on the main thread.
-    for (const auto& c : m_prefetchedChunks)
-        m_chunks.insert(std::make_pair(c.first.m_id, c.second));
 
     // Prefetch new data chunks.
     PrefetchChunks();
@@ -114,14 +121,11 @@ Dictionary LocalTimelineBlockRandomizer::GetInnerState()
 
 void LocalTimelineBlockRandomizer::SetInnerState(const Dictionary& state)
 {
-    m_chunkDescriptions = m_originalChunkDescriptions;
-    m_rng.seed((unsigned long)m_sweepIndex + m_seedOffset);
-    Microsoft::MSR::CNTK::RandomShuffleMT(m_chunkDescriptions, m_rng);
-
-    m_globalChunkPosition = (ChunkIdType)state[L"globalChunkPosition"].Value<size_t>();
     if (m_prefetch.valid())
         m_prefetch.wait();
-    m_prefetchedChunkDescriptions = m_chunkDescriptions;
+    m_rng.seed((unsigned long)m_sweepIndex + m_seedOffset);
+    Microsoft::MSR::CNTK::RandomShuffleMT(m_prefetchedChunkDescriptions, m_rng);
+    m_globalChunkPosition = (ChunkIdType)state[L"globalChunkPosition"].Value<size_t>();
 }
 
 }
