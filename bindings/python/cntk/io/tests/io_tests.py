@@ -1218,22 +1218,22 @@ def test_user_deserializer_sample_mode():
         assert (sample_y_values == expected_values).all()
 
     # Big chunks
-    d = GenDeserializer(stream_infos=streams, num_chunks=1000,
+    d = GenDeserializer(stream_infos=streams, num_chunks=20,
                         num_sequences=100, as_array=True)
-    mbs = MinibatchSource([d], randomize=False, max_sweeps=2)
-    run_minibatch_source(mbs, num_chunks=1000, num_samples_per_value=200)
+    mbs = MinibatchSource([d], randomize=False, max_sweeps=2, randomization_window_in_chunks=5)
+    run_minibatch_source(mbs, num_chunks=20, num_samples_per_value=200)
     # Randomized
-    mbs = MinibatchSource([d], randomize=True, max_sweeps=2)
-    run_minibatch_source(mbs, num_chunks=1000, num_samples_per_value=200)
+    mbs = MinibatchSource([d], randomize=True, max_sweeps=2, randomization_window_in_chunks=5)
+    run_minibatch_source(mbs, num_chunks=20, num_samples_per_value=200)
 
     # Small chunks of 1
-    d = GenDeserializer(stream_infos=streams, num_chunks=1000,
+    d = GenDeserializer(stream_infos=streams, num_chunks=20,
                         num_sequences=1, as_array=True)
-    mbs = MinibatchSource([d], randomize=False, max_sweeps=3)
-    run_minibatch_source(mbs, num_chunks=1000, num_samples_per_value=3)
+    mbs = MinibatchSource([d], randomize=False, max_sweeps=3, randomization_window_in_chunks=5)
+    run_minibatch_source(mbs, num_chunks=20, num_samples_per_value=3)
     # Randomized
-    mbs = MinibatchSource([d], randomize=True, max_sweeps=3)
-    run_minibatch_source(mbs, num_chunks=1000, num_samples_per_value=3)
+    mbs = MinibatchSource([d], randomize=True, max_sweeps=3, randomization_window_in_chunks=5)
+    run_minibatch_source(mbs, num_chunks=20, num_samples_per_value=3)
 
 
 def test_user_deserializer_sequence_mode():
