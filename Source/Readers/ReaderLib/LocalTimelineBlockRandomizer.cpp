@@ -30,14 +30,17 @@ LocalTimelineBlockRandomizer::LocalTimelineBlockRandomizer(
 
 void LocalTimelineBlockRandomizer::PrefetchChunks()
 {
-    size_t position = m_globalChunkPosition % m_originalChunkDescriptions.size();
-    size_t sweepIndex = m_sweepIndex;
+    size_t capturedPosition = m_globalChunkPosition % m_originalChunkDescriptions.size();
+    size_t capturedSweepIndex = m_sweepIndex;
 
-    m_prefetch = std::async(std::launch::async, [&, this]()
+    m_prefetch = std::async(std::launch::async, [=]()
     {
+        size_t position = capturedPosition;
+        size_t sweepIndex = capturedSweepIndex;
         // Prefetch does not change any state that cannot be recalculated,
         // only prefetches data.
         size_t range = m_randomizationRange;
+        m_prefetchedChunks.clear();
         while (range > 0)
         {
             if (position == 0)
@@ -93,8 +96,6 @@ void LocalTimelineBlockRandomizer::RefillSequenceWindow()
 
     for (const auto& c : m_prefetchedChunks)
     {
-        ++m_globalChunkPosition;
-
         auto sweepPosition = m_globalChunkPosition % m_originalChunkDescriptions.size();
         if (sweepPosition % m_config.m_numberOfWorkers == m_config.m_workerRank)
         {
@@ -105,6 +106,8 @@ void LocalTimelineBlockRandomizer::RefillSequenceWindow()
         // Last chunk
         if (sweepPosition == m_originalChunkDescriptions.size() - 1)
             m_window.m_sequences.push_back(s_endOfSweep);
+
+        ++m_globalChunkPosition;
     }
 
     // Prefetch new data chunks.

@@ -14,7 +14,7 @@ from cntk.io import MinibatchSource, CTFDeserializer, StreamDefs, StreamDef, \
     FULL_DATA_SWEEP, INFINITELY_REPEAT, \
     DEFAULT_RANDOMIZATION_WINDOW_IN_CHUNKS, \
     sequence_to_cntk_text_format, UserMinibatchSource, StreamInformation, \
-    MinibatchData, FromData
+    MinibatchData, FromData, UserDeserializer, UserChunk, InMemoryChunk
 from cntk.logging import TraceLevel
 import cntk.io.transforms as xforms
 from cntk.cntk_py import to_dictionary, MinibatchSourceConfig
@@ -1143,3 +1143,92 @@ def test_inmemory_deserializer_sequences():
 
     result = mb[mbs.streams['yy']].data.asarray()
     assert (result == np.array([[[ 0, 1 ], [ 1, 0], [1, 0]]], dtype=np.float32)).all()
+
+# Helper generator
+class GenDeserializer(UserDeserializer):
+    def __init__(self, stream_infos, num_chunks, chunk_size, max_sequence_len = 1, as_array = False):
+        super(GenDeserializer, self).__init__()
+        self._streams = stream_infos
+        self._num_chunks = num_chunks
+        self._chunk_size = chunk_size
+        self._max_sequence_len = max_sequence_len
+        self._as_array = as_array
+
+    def stream_infos(self):
+        return self._streams;
+
+    def chunk_infos(self):
+        return [i for i in range(self._num_chunks)]
+
+    def get_chunk(self, chunk_id):
+        import scipy.sparse as sp
+        import random
+        random.seed(chunk_id)
+        result = {}
+        for stream in self._streams:
+            count = 0       
+            chunk = []
+            while count < self._chunk_size:
+                if self._max_sequence_len == 1:
+                    shape = stream.sample_shape
+                    count += 1
+                else:
+                    seq_len = max(randint(1, max_sequence_len), self._chunk_size - count)
+                    shape = [seq_len]
+                    shape.extend(stream.sample_shape)
+                    shape = tuple(shape)
+                    count += seq_len
+
+                if stream.storage_format == 'dense':
+                    data = np.full(shape=shape, fill_value=chunk_id, dtype=np.float32)
+                else:
+                    data = np.full(shape=shape, fill_value=chunk_id, dtype=np.float32)
+                    data = sp.csr_matrix(data, shape=shape, dtype=np.float32)
+
+                chunk.append(data)
+            result[stream.name] = chunk if not self._as_array else np.asarray(chunk)
+        return InMemoryChunk(chunk_id, result, self._streams)
+
+
+def test_user_deserializer_sample_mode():
+    import scipy.sparse as sp
+    streams = [StreamInformation('x', 0, 'dense', np.float32, (2, 2)), 
+               StreamInformation('y', 1, 'sparse', np.float32, (3, 1))]
+
+    def run_minibatch_source(minibatch_source, num_chunks, num_samples_per_value):
+        sample_x_values = np.zeros(num_chunks, dtype=np.int32)
+        sample_y_values = np.zeros(num_chunks, dtype=np.int32)
+        while True:
+            mb = minibatch_source.next_minibatch(20)
+            if not mb:
+                break
+
+            for value in mb[minibatch_source.streams.x].asarray():
+                first_value = int(value[0][0][0])
+                sample_x_values[first_value] += 1
+
+            for value in mb[minibatch_source.streams.y].asarray():
+                first_value = int(value[0][0][0])
+                sample_y_values[first_value] += 1
+
+        expected_values = np.full(num_chunks, fill_value=num_samples_per_value, dtype=np.int32)
+        assert (sample_x_values == expected_values).all()
+        assert (sample_y_values == expected_values).all()
+
+    # Big chunks
+    d = GenDeserializer(stream_infos=streams, num_chunks=1000,
+                        chunk_size=100, as_array=True)
+    mbs = MinibatchSource([d], randomize=False, max_sweeps=2)
+    run_minibatch_source(mbs, num_chunks=1000, num_samples_per_value=200)
+    # Randomized
+    mbs = MinibatchSource([d], randomize=True, max_sweeps=2)
+    run_minibatch_source(mbs, num_chunks=1000, num_samples_per_value=200)
+
+    # Small chunks of 1
+    d = GenDeserializer(stream_infos=streams, num_chunks=1000,
+                        chunk_size=1, as_array=True)
+    mbs = MinibatchSource([d], randomize=False, max_sweeps=3)
+    run_minibatch_source(mbs, num_chunks=1000, num_samples_per_value=3)
+    # Randomized
+    mbs = MinibatchSource([d], randomize=True, max_sweeps=3)
+    run_minibatch_source(mbs, num_chunks=1000, num_samples_per_value=3)

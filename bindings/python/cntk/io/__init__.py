@@ -413,11 +413,11 @@ class StreamInformation(cntk_py.StreamInformation):
         self.m_element_type = sanitize_dtype_cntk(dtype)
         self.m_sample_layout = cntk_py.NDShape(shape)
         self.sample_shape = shape
+        self.storage_format = storage_format
 
     @property
     def name(self):
         return self.m_name
-
 
 class UserMinibatchSource(cntk_py.SwigMinibatchSource):
     '''
@@ -1156,7 +1156,10 @@ class UserDeserializer(cntk_py.SwigDataDeserializer):
         self._last_chunk = None
         self._last_chunk_id = None
         inner = self.stream_infos()
+        if len(inner) == 0:
+            raise ValueError('Deserializer must provide at least one stream')
         infos.extend(inner)
+
         streams = {si.m_name: si for si in inner}
         self.streams = Record(**streams)
 
@@ -1165,7 +1168,10 @@ class UserDeserializer(cntk_py.SwigDataDeserializer):
         for c in self.chunk_infos():
             t = cntk_py.ChunkDescription()
             t.m_id = c
-            inner.append(t)       
+            inner.append(t)
+        if len(inner) == 0:
+            raise ValueError('Deserializer must provide at least on chunk')
+
         infos.extend(inner)
 
     def _get_chunk(self, chunk_id):
@@ -1175,7 +1181,7 @@ class UserDeserializer(cntk_py.SwigDataDeserializer):
 
     def _get_sequences_for_chunk(self, chunk_id, sequences):
         if self._last_chunk_id != chunk_id:
-            raise ValueError('Unexpected chunk id')
+            raise ValueError('Logical error in randomizer: unexpected chunk id')
         sequences.extend(self._last_chunk.sequence_infos())
 
 class SequenceInformation(cntk_py.SequenceDescription):
