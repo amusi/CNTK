@@ -15,14 +15,30 @@ LocalTimelineNoRandomizer::LocalTimelineNoRandomizer(DataDeserializerPtr deseria
 {
 }
 
+void LocalTimelineNoRandomizer::PrefetchChunk()
+{
+    size_t capturedPosition = m_currentChunkPosition;
+    m_prefetch = std::async(std::launch::async, [=]()
+    {
+        auto chunkId = m_originalChunkDescriptions[capturedPosition].m_id;
+        std::get<0>(m_prefetchedChunk) = m_originalChunkDescriptions[capturedPosition];
+        std::get<1>(m_prefetchedChunk) = m_deserializer->GetChunk(chunkId);
+
+        std::get<2>(m_prefetchedChunk).clear();
+        m_deserializer->GetSequencesForChunk(m_currentChunkPosition, std::get<2>(m_prefetchedChunk));
+    });
+}
+
 void LocalTimelineNoRandomizer::RefillSequenceWindow()
 {
-    m_window.m_sequences.clear();
-    m_window.m_dataChunks.clear();
+    if (!m_prefetch.valid())
+        PrefetchChunk();
+    m_prefetch.wait();
 
-    auto chunkId = m_originalChunkDescriptions[m_currentChunkPosition].m_id;
-    m_window.m_dataChunks[chunkId] = m_deserializer->GetChunk(chunkId);
-    m_deserializer->GetSequencesForChunk(m_currentChunkPosition, m_window.m_sequences);
+    m_window.m_sequences.assign(std::get<2>(m_prefetchedChunk).begin(), std::get<2>(m_prefetchedChunk).end());
+
+    m_window.m_dataChunks.clear();
+    m_window.m_dataChunks[std::get<0>(m_prefetchedChunk).m_id] = std::get<1>(m_prefetchedChunk);
 
     if (m_config.m_numberOfWorkers > 1)
     {
@@ -48,6 +64,7 @@ void LocalTimelineNoRandomizer::RefillSequenceWindow()
 
     // Moving to the next chunk.
     m_currentChunkPosition = (m_currentChunkPosition + 1) % m_originalChunkDescriptions.size();
+    PrefetchChunk();
 }
 
 Dictionary LocalTimelineNoRandomizer::GetInnerState()
@@ -60,6 +77,9 @@ Dictionary LocalTimelineNoRandomizer::GetInnerState()
 
 void LocalTimelineNoRandomizer::SetInnerState(const Dictionary& state)
 {
+    if (m_prefetch.valid())
+        m_prefetch.wait();
+
     m_currentChunkPosition = (ChunkIdType)state[L"currentChunkPosition"].Value<size_t>();
     m_currentSequencePosition = state[L"currentSequencePosition"].Value<size_t>();
 }

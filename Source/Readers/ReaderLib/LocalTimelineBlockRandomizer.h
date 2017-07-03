@@ -39,7 +39,7 @@ private:
     const size_t m_seedOffset;
 
     // Current chunk position that the randomizer works with.
-    ChunkIdType m_globalChunkPosition;
+    ChunkIdType m_chunkPosition;
 
     std::mt19937_64 m_rng;
 

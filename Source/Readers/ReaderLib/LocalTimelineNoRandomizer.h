@@ -30,11 +30,16 @@ public:
     void RefillSequenceWindow() override;
 
 private:
+    void PrefetchChunk();
+
     // Current chunk position.
     ChunkIdType m_currentChunkPosition;
 
     // Current sequence position
     size_t m_currentSequencePosition;
+
+    std::future<void> m_prefetch;
+    std::tuple<ChunkDescription, ChunkPtr, std::vector<SequenceDescription>> m_prefetchedChunk;
 };
 
 }

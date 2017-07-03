@@ -22,7 +22,7 @@ LocalTimelineBlockRandomizer::LocalTimelineBlockRandomizer(
 : Base(deserializer, multithreadedGetNextSequences, maxNumberOfInvalidSequences),
   m_randomizationRange(randomizationRange),
   m_seedOffset(seedOffset),
-  m_globalChunkPosition(0),
+  m_chunkPosition(0),
   m_sampleBasedRandomizationWindow(sampleBasedRandomizationWindow)
 {
     m_prefetchedChunkDescriptions = m_originalChunkDescriptions;
@@ -32,7 +32,7 @@ LocalTimelineBlockRandomizer::LocalTimelineBlockRandomizer(
 
 void LocalTimelineBlockRandomizer::PrefetchChunks()
 {
-    size_t capturedPosition = m_globalChunkPosition % m_originalChunkDescriptions.size();
+    size_t capturedPosition = m_chunkPosition;
     size_t capturedSweepIndex = m_sweepIndex;
 
     m_prefetch = std::async(std::launch::async, [=]()
@@ -103,29 +103,25 @@ void LocalTimelineBlockRandomizer::RefillSequenceWindow()
 
     for (const auto& c : m_prefetchedChunks)
     {
-        auto sweepPosition = m_globalChunkPosition % m_originalChunkDescriptions.size();
-        if (sweepPosition % m_config.m_numberOfWorkers == m_config.m_workerRank)
-        {
-            m_window.m_sequences.insert(m_window.m_sequences.end(), std::get<2>(c).begin(), std::get<2>(c).end());
-            m_window.m_dataChunks.insert(std::make_pair(std::get<0>(c).m_id, std::get<1>(c)));
-        }
+        m_window.m_sequences.insert(m_window.m_sequences.end(), std::get<2>(c).begin(), std::get<2>(c).end());
+        m_window.m_dataChunks.insert(std::make_pair(std::get<0>(c).m_id, std::get<1>(c)));
 
         // Last chunk
-        if (sweepPosition == m_originalChunkDescriptions.size() - 1)
+        auto sweepEnd = (m_chunkPosition == m_originalChunkDescriptions.size() - 1);
+        if (sweepEnd)
             m_window.m_sequences.push_back(s_endOfSweep);
 
-        ++m_globalChunkPosition;
+        m_chunkPosition = (m_chunkPosition + 1) % m_originalChunkDescriptions.size();
     }
 
     // Prefetch new data chunks.
     PrefetchChunks();
 }
 
-
 Dictionary LocalTimelineBlockRandomizer::GetInnerState()
 {
     Dictionary state;
-    state[L"globalChunkPosition"] = (size_t)m_globalChunkPosition;
+    state[L"chunkPosition"] = (size_t)m_chunkPosition;
     return state;
 }
 
@@ -133,9 +129,10 @@ void LocalTimelineBlockRandomizer::SetInnerState(const Dictionary& state)
 {
     if (m_prefetch.valid())
         m_prefetch.wait();
+
     m_rng.seed((unsigned long)m_sweepIndex + m_seedOffset);
     Microsoft::MSR::CNTK::RandomShuffleMT(m_prefetchedChunkDescriptions, m_rng);
-    m_globalChunkPosition = (ChunkIdType)state[L"globalChunkPosition"].Value<size_t>();
+    m_chunkPosition = (ChunkIdType)state[L"globalChunkPosition"].Value<size_t>();
 }
 
 }
