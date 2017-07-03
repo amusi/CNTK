@@ -411,7 +411,7 @@ class StreamInformation(cntk_py.StreamInformation):
         self.m_id = stream_id
         self.m_storage_format = StreamInformation._storage[storage_format]
         self.m_element_type = sanitize_dtype_cntk(dtype)
-        self.m_sample_layout = cntk_py.NDShape(shape)
+        self.m_sample_layout = cntk_py.NDShape(list(reversed(shape)))
         self.sample_shape = shape
         self.storage_format = storage_format
 
