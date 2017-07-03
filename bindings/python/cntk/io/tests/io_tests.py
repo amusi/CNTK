@@ -1245,7 +1245,6 @@ def test_user_deserializer_sequence_mode():
         sequence_x_values = np.zeros(num_chunks, dtype=np.int32)
         sequence_y_values = np.zeros(num_chunks, dtype=np.int32)
         while True:
-            mb = None
             mb = minibatch_source.next_minibatch(20)
             if not mb:
                 break
