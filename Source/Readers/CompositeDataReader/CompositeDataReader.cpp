@@ -113,9 +113,13 @@ CompositeDataReader::CompositeDataReader(const ConfigParameters& config) :
     if (!composable) // Pick up simple interface.
     {
         if (randomize)
+        {
+            bool sampleBasedRandomizationWindow = config(L"sampleBasedRandomizationWindow", false);
             m_sequenceEnumerator = std::make_shared<LocalTimelineBlockRandomizer>(deserializer,
-                config(L"randomizationWindow", requestDataSize), GetRandomSeed(config),
+                sampleBasedRandomizationWindow, config(L"randomizationWindow", requestDataSize),
+                GetRandomSeed(config),
                 multiThreadedDeserialization, maxErrors);
+        }
         else
             m_sequenceEnumerator = std::make_shared<LocalTimelineNoRandomizer>(deserializer, multiThreadedDeserialization, maxErrors);
     }

@@ -22,6 +22,7 @@ class LocalTimelineBlockRandomizer : public LocalTimelineRandomizerBase
 public:
     LocalTimelineBlockRandomizer(
         DataDeserializerPtr deserializer,
+        bool sampleBasedRandomizationWindow,
         size_t randomizationRange,
         size_t seedOffset = 0,
         bool multithreadedGetNextSequences = false,
@@ -47,6 +48,7 @@ private:
 
     std::future<void> m_prefetch;
     std::vector<std::tuple<ChunkDescription, ChunkPtr, std::vector<SequenceDescription>>> m_prefetchedChunks;
+    bool m_sampleBasedRandomizationWindow;
 };
 
 }

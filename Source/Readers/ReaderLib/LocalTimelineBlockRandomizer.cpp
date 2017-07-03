@@ -14,6 +14,7 @@ namespace CNTK {
 
 LocalTimelineBlockRandomizer::LocalTimelineBlockRandomizer(
     DataDeserializerPtr deserializer,
+    bool sampleBasedRandomizationWindow,
     size_t randomizationRange,
     size_t seedOffset,
     bool multithreadedGetNextSequences,
@@ -21,7 +22,8 @@ LocalTimelineBlockRandomizer::LocalTimelineBlockRandomizer(
 : Base(deserializer, multithreadedGetNextSequences, maxNumberOfInvalidSequences),
   m_randomizationRange(randomizationRange),
   m_seedOffset(seedOffset),
-  m_globalChunkPosition(0)
+  m_globalChunkPosition(0),
+  m_sampleBasedRandomizationWindow(sampleBasedRandomizationWindow)
 {
     m_prefetchedChunkDescriptions = m_originalChunkDescriptions;
     m_rng.seed((unsigned long)m_sweepIndex + m_seedOffset);
@@ -39,7 +41,7 @@ void LocalTimelineBlockRandomizer::PrefetchChunks()
         size_t sweepIndex = capturedSweepIndex;
         // Prefetch does not change any state that cannot be recalculated,
         // only prefetches data.
-        size_t range = m_randomizationRange;
+        int64_t range = m_randomizationRange;
         m_prefetchedChunks.clear();
         while (range > 0)
         {
@@ -71,7 +73,12 @@ void LocalTimelineBlockRandomizer::PrefetchChunks()
                 }
 
                 m_prefetchedChunks.push_back(std::make_tuple(desc, data, sequences));
-                --range;
+
+                if (m_sampleBasedRandomizationWindow)
+                    --range;
+                else
+                    for (const auto& n : sequences)
+                        range -= n.m_numberOfSamples;
             }
             else
             {
