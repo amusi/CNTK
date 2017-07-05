@@ -1122,6 +1122,7 @@ class UserDeserializer(cntk_py.SwigDataDeserializer):
     '''
     def __init__(self):
         super(UserDeserializer, self).__init__()
+        self.__disown__()
 
     def stream_infos(self):
         '''
@@ -1251,7 +1252,8 @@ class UserChunk(cntk_py.SwigChunk):
 
 class InMemoryChunk(UserChunk):
     '''
-    Chunk that has all data in memory.
+    Chunk that has all data in memory. The data is represented as a dictionary
+    of "stream name" -> sequence data (list of sequences, or numpy array or csr matrix)
 
     Args:
         data (numpy array or csr matrix): actual data of the chunk
@@ -1266,7 +1268,6 @@ class InMemoryChunk(UserChunk):
         # prefill result with sequence information from the first stream.
         first_data = data[stream_infos[0].name];
         num_sequences = len(first_data) if isinstance(first_data, list) else first_data.shape[0]
-
         self._sequence_infos = [SequenceInformation(index_in_chunk=i, number_of_samples=1,
                                                     chunk_id=chunk_id, id=i) for i in range(num_sequences)]
 

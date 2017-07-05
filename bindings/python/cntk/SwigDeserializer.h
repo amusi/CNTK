@@ -207,35 +207,28 @@ namespace CNTK
         void GetSequence(size_t sequenceIndex, std::vector<CNTK::SequenceDataPtr>& result) override
         {
             GilStateGuard guard;
-            PyObject *pylist = PyList_New(0);
-            Py_INCREF(pylist);
+            PyObjectPtr pylist(PyList_New(0), PyDecRef);
+            Py_INCREF(pylist.get());
 
-            _GetSequence(sequenceIndex, pylist);
+            _GetSequence(sequenceIndex, pylist.get());
 
-            PyObject *item = nullptr;
-            PyObject *iterator = PyObject_GetIter(pylist);
+            PyObjectPtr iterator(PyObject_GetIter(pylist.get()), PyDecRef);
             if (!iterator)
-                SWIG_exception_fail(SWIG_ValueError, "cannot convert list element to CNTK::StreamInformation");
+                RuntimeError("Cannot convert result of get_sequence to list.");
 
             size_t i = 0;
-            while ((item = PyIter_Next(iterator)))
+            PyObjectPtr item(nullptr, PyDecRef);
+            SequenceDataPtr sequence;
+            while ((item = PyObjectPtr(PyIter_Next(iterator.get()), PyDecRef)))
             {
-                if (PyArray_Check(item))
-                {
-                    auto sequence = FromNumPy(item, i++);
-                    result.push_back(sequence);
-                }
+                if (PyArray_Check(item.get()))
+                    sequence = FromNumPy(item.get(), i++);
                 else if (item->ob_type->tp_name == std::string("csr_matrix"))
-                {
-                    auto sequence = FromCSR(item, i++);
-                    result.push_back(sequence);
-                }
-                Py_DECREF(item);
+                    sequence = FromCSR(item.get(), i++);
+                else
+                    RuntimeError("Unexpected type returned by 'get_sequence'. List of numpy/csr_matrix is expected.");
+                result.push_back(sequence);
             }
-
-        fail:
-            Py_DECREF(iterator);
-            Py_DECREF(pylist);
         }
 
         virtual void _GetSequence(size_t index, PyObject*) { NOT_IMPLEMENTED; }
