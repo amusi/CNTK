@@ -151,15 +151,14 @@ namespace CNTK
 
         SequenceDataPtr FromNumPy(PyObject* object, const StreamInformation& info)
         {
-            if (!PyArray_Check((PyArrayObject*)object))
-                RuntimeError("NumPy array expected");
-
             PyArrayObject* array = (PyArrayObject*)object;
             int rank = PyArray_NDIM(array);
             npy_intp* np_shape = PyArray_SHAPE(array);
 
             uint32_t numSamples = info.m_sampleLayout.Rank() == rank ? 1 : static_cast<uint32_t>(np_shape[0]);
-            int typecode = PyArray_TYPE(array);
+            auto type = PyArray_TYPE(array);
+            if (type != NPY_FLOAT32)
+                RuntimeError("Only float numbers are currently supported.");
 
             SequenceDataPtr result = std::make_shared<SwigDenseData>(array);
             result->m_numberOfSamples = numSamples;
@@ -169,6 +168,10 @@ namespace CNTK
         SequenceDataPtr FromCSR(PyObject* object, const StreamInformation& info)
         {
             auto data = (PyArrayObject*)PyObject_GetAttrString(object, "data");
+            auto type = PyArray_TYPE(data);
+            if (type != NPY_FLOAT32)
+                RuntimeError("Only float numbers are currently supported.");
+
             auto indptr = (PyArrayObject*)PyObject_GetAttrString(object, "indptr");
             auto indices = (PyArrayObject*)PyObject_GetAttrString(object, "indices");
 
@@ -222,6 +225,15 @@ namespace CNTK
                 }
 
                 size_t size = GetSize(m_pyData.front());
+                for (size_t i = 1; i < m_streamInfos.size(); i++)
+                {
+                    auto currentSize = GetSize(m_pyData[i]);
+                    if (size != currentSize)
+                        RuntimeError("Provide an equal number of sequences across all streams in chunk, currently "
+                            "'%ls'- %d sequences, '%ls'- %d sequences", m_streamInfos.front().m_name.c_str(), (int)size,
+                            m_streamInfos[i].m_name.c_str(), (int)currentSize);
+                }
+
                 m_data.resize(size * m_streamInfos.size());
                 for (size_t i = 0; i < m_streamInfos.size(); i++)
                     FillDataFrom(i, m_pyData[i], size);
@@ -264,16 +276,15 @@ namespace CNTK
                     if (storageFormat == StorageFormat::Dense)
                     {
                         if(!PyArray_Check(item))
-                            RuntimeError("Expect dense data be represented as array.");
+                            RuntimeError("Expect dense data to be represented as numpy array.");
                         sequence = FromNumPy(item, info);
                     }
                     else // Sparse
                     {
                         if (item->ob_type->tp_name != std::string("csr_matrix"))
-                            RuntimeError("Expect sparsa data be represented as csr_matrix.");
+                            RuntimeError("Expect sparsa data to be represented as csr_matrix.");
                         sequence = FromCSR(item, info);
                     }
-
                     m_data[i * m_streamInfos.size() + streamIndex] = sequence;
                 }
             }
@@ -282,15 +293,17 @@ namespace CNTK
                 PyArrayObject* array = (PyArrayObject*)o;
                 int rank = PyArray_NDIM(array);
                 npy_intp* np_shape = PyArray_SHAPE(array);
+                auto type = PyArray_TYPE(array);
+                if (type != NPY_FLOAT32)
+                    RuntimeError("Only float numbers are currently supported.");
 
                 if(info.m_sampleLayout.Rank() == rank + 1)
                     RuntimeError("Dense data supported only as single sample per row.");
 
                 size_t sampleSize = info.m_sampleLayout.TotalSize();
-                volatile size_t i = 0;
-                for (; i < dataSize; ++i)
+                for (size_t i = 0; i < dataSize; ++i)
                 {
-                    volatile auto d = (float*)PyArray_GETPTR1(array, i);
+                    auto d = (float*)PyArray_GETPTR1(array, i);
                     sequence = std::make_shared<SwigDensePtrData>(d, m_pyChunk);
                     sequence->m_numberOfSamples = 1;
                     m_data[i * m_streamInfos.size() + streamIndex] = sequence;
@@ -298,7 +311,12 @@ namespace CNTK
             }
             else if (storageFormat == StorageFormat::SparseCSC && o->ob_type->tp_name == std::string("csr_matrix"))
             {
-                auto data = (float*)PyArray_DATA((PyArrayObject*)PyObject_GetAttrString(o, "data"));
+                auto pyData = (PyArrayObject*)PyObject_GetAttrString(o, "data");
+                auto type = PyArray_TYPE(pyData);
+                if (type != NPY_FLOAT32)
+                    RuntimeError("Only float numbers are currently supported.");
+
+                auto data = (float*)PyArray_DATA(pyData);
                 auto indices = (SparseIndexType*)PyArray_DATA((PyArrayObject*)PyObject_GetAttrString(o, "indices"));
                 auto indptr = (SparseIndexType*)PyArray_DATA((PyArrayObject*)PyObject_GetAttrString(o, "indptr"));
 
@@ -310,7 +328,7 @@ namespace CNTK
                 }
             }
             else
-                RuntimeError("Unexpected data provided.");
+                RuntimeError("Unexpected data type '%s'. Please use numpy arrays, csr_matrix or list of those.", o->ob_type->tp_name);
         }
 
         void GetSequencesInfo(std::vector<CNTK::SequenceDescription>& descriptions)
@@ -327,7 +345,7 @@ namespace CNTK
                 unsigned int sampleCount = 1;
                 for (size_t i = 0, j = 0; i < m_data.size(); ++i)
                 {
-                    sampleCount = std::max(sampleCount, descriptions[i].m_numberOfSamples);
+                    sampleCount = std::max(sampleCount, m_data[i]->m_numberOfSamples);
                     if (i % m_streamInfos.size() == 0)
                     {
                         descriptions.push_back(SequenceDescription{ j++, sampleCount, (ChunkIdType)m_chunkId });

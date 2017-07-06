@@ -33,7 +33,7 @@ void LocalTimelineNoRandomizer::RefillSequenceWindow()
 {
     if (!m_prefetch.valid())
         PrefetchChunk();
-    m_prefetch.wait();
+    m_prefetch.get();
 
     m_window.m_sequences.assign(std::get<2>(m_prefetchedChunk).begin(), std::get<2>(m_prefetchedChunk).end());
 

@@ -14,7 +14,7 @@ from cntk.io import MinibatchSource, CTFDeserializer, StreamDefs, StreamDef, \
     FULL_DATA_SWEEP, INFINITELY_REPEAT, \
     DEFAULT_RANDOMIZATION_WINDOW_IN_CHUNKS, \
     sequence_to_cntk_text_format, UserMinibatchSource, StreamInformation, \
-    MinibatchData, FromData, UserDeserializer, UserChunk, InMemoryChunk
+    MinibatchData, FromData, UserDeserializer
 from cntk.logging import TraceLevel
 import cntk.io.transforms as xforms
 from cntk.cntk_py import to_dictionary, MinibatchSourceConfig
@@ -1146,24 +1146,21 @@ def test_inmemory_deserializer_sequences():
 
 # Helper generator
 class GenDeserializer(UserDeserializer):
-    def __init__(self, stream_infos, num_chunks, num_sequences, max_sequence_len = 1, as_array = False):
+    def __init__(self, stream_infos, num_chunks, num_sequences, max_sequence_len = 1):
         super(GenDeserializer, self).__init__()
         self._streams = stream_infos
         self._num_chunks = num_chunks
         self._num_sequences = num_sequences
         self._max_sequence_len = max_sequence_len
-        self._as_array = as_array
 
     def stream_infos(self):
         return self._streams;
 
-    def chunk_infos(self):
-        return [i for i in range(self._num_chunks)]
+    def num_chunks(self):
+        return self._num_chunks
 
     def get_chunk(self, chunk_id):
-        import scipy.sparse as sp
-        import random
-        import functools
+        import scipy.sparse as sp, random, functools
         random.seed(chunk_id)
         result = {}
         for stream in self._streams:
@@ -1186,9 +1183,11 @@ class GenDeserializer(UserDeserializer):
                     data = sp.csr_matrix(data, shape=shape, dtype=np.float32)
                 chunk.append(data)
 
-            result[stream.name] = chunk if not self._as_array else np.asarray(chunk)
-        return InMemoryChunk(chunk_id, result, self._streams)
-
+            if stream.storage_format == 'dense':
+                result[stream.name] = chunk if self._max_sequence_len != 1 else np.stack(chunk)
+            else: # sparse
+                result[stream.name] = chunk if self._max_sequence_len != 1 else sp.csr_matrix(sp.vstack(chunk))
+        return result
 
 def test_user_deserializer_sample_mode():
     import scipy.sparse as sp
@@ -1218,8 +1217,7 @@ def test_user_deserializer_sample_mode():
         assert (sample_y_values == expected_values).all()
 
     # Big chunks
-    d = GenDeserializer(stream_infos=streams, num_chunks=20,
-                        num_sequences=100, as_array=True)
+    d = GenDeserializer(stream_infos=streams, num_chunks=20, num_sequences=100)
     mbs = MinibatchSource([d], randomize=False, max_sweeps=2, randomization_window_in_chunks=5)
     run_minibatch_source(mbs, num_chunks=20, num_samples_per_value=200)
     # Randomized
@@ -1227,8 +1225,7 @@ def test_user_deserializer_sample_mode():
     run_minibatch_source(mbs, num_chunks=20, num_samples_per_value=200)
 
     # Small chunks of 1
-    d = GenDeserializer(stream_infos=streams, num_chunks=20,
-                        num_sequences=1, as_array=True)
+    d = GenDeserializer(stream_infos=streams, num_chunks=20, num_sequences=1)
     mbs = MinibatchSource([d], randomize=False, max_sweeps=3, randomization_window_in_chunks=5)
     run_minibatch_source(mbs, num_chunks=20, num_samples_per_value=3)
     # Randomized
@@ -1245,6 +1242,7 @@ def test_user_deserializer_sequence_mode():
         sequence_x_values = np.zeros(num_chunks, dtype=np.int32)
         sequence_y_values = np.zeros(num_chunks, dtype=np.int32)
         while True:
+            mb = None
             mb = minibatch_source.next_minibatch(20)
             if not mb:
                 break
@@ -1261,7 +1259,7 @@ def test_user_deserializer_sequence_mode():
 
     # Big chunks
     d = GenDeserializer(stream_infos=streams, num_chunks=15, 
-                        num_sequences=100, as_array=True, max_sequence_len=10)
+                        num_sequences=100, max_sequence_len=10)
     mbs = MinibatchSource([d], randomize=False, max_sweeps=2, randomization_window_in_chunks=5)
     run_minibatch_source(mbs, num_chunks=15, num_sequences_per_value=200)
     # Randomized
@@ -1270,7 +1268,7 @@ def test_user_deserializer_sequence_mode():
 
     # Small chunks of 1
     d = GenDeserializer(stream_infos=streams, num_chunks=15,
-                        num_sequences=1, as_array=True, max_sequence_len=10)
+                        num_sequences=1, max_sequence_len=10)
     mbs = MinibatchSource([d], randomize=False, max_sweeps=3, randomization_window_in_chunks=5)
     run_minibatch_source(mbs, num_chunks=15, num_sequences_per_value=3)
     # Randomized

@@ -1244,46 +1244,6 @@ class UserChunk(cntk_py.SwigChunk):
     def _get_sequence(self, sequence_id, sequences):
         sequences.extend(self.get_sequence(sequence_id))
 
-class InMemoryChunk(UserChunk):
-    '''
-    Chunk that has all data in memory. The data is represented as a dictionary
-    of "stream name" -> sequence data (list of sequences, or numpy array or csr matrix)
-
-    Args:
-        data (numpy array or csr matrix): actual data of the chunk
-        stream_infos (array of tuple(:class:`StreamInformation`, isSequence)): information about 
-         streams of the corresponding deserializer
-    '''
-    def __init__(self, chunk_id, data, stream_infos):
-        super(InMemoryChunk, self).__init__(stream_infos)
-        self._data = data
-        self._streams = stream_infos
-
-        # prefill result with sequence information from the first stream.
-        first_data = data[stream_infos[0].name];
-        num_sequences = len(first_data) if isinstance(first_data, list) else first_data.shape[0]
-        self._sequence_infos = [SequenceInformation(index_in_chunk=i, number_of_samples=1,
-                                                    chunk_id=chunk_id, id=i) for i in range(num_sequences)]
-
-        # update number of samples in sequence description to max
-        for stream in stream_infos:
-            ds = data[stream.name]
-            current_num_sequences = len(ds) if isinstance(ds, list) else ds.shape[0]
-            if current_num_sequences != num_sequences:
-                raise ValueError('Number of sequences inside the chunk should match')
-            is_sequence = (ds[0].shape != stream.sample_shape)
-            if not is_sequence: # in case of samples no need to update the max lengh
-                continue
-            for i in range(current_num_sequences):
-                self._sequence_infos[i].m_number_of_samples = max(self._sequence_infos[i].m_number_of_samples,
-                                                                  ds[i].shape[0])
-
-    def sequence_infos(self):
-        return self._sequence_infos
-
-    def get_sequence(self, sequence_id):     
-        return [self._data[s.name][sequence_id] for s in self._streams]
-
 class FromData(UserDeserializer):
     '''
     This wraps in-memory data as a CNTK deserializer.
@@ -1360,10 +1320,8 @@ class FromData(UserDeserializer):
 
         self._data = dict()         # [name] -> numpy.array or scipy.sparse.csr_matrix
         self._types = dict()        # [name] -> Variable._Type
-        self._is_sequence = dict()  # [name] -> bool
-
-        self._num_sequences = -1  # total number of sequences (can be of length 1 in sample mode)
-                                  # must be the same for all args
+        num_sequences = -1          # total number of sequences (can be of length 1 in sample mode)
+                                    # must be the same for all streams
 
         # get the data and types from the input, and form streams array
         from scipy import sparse
@@ -1397,30 +1355,25 @@ class FromData(UserDeserializer):
                 type.dtype
             except:
                 type = type.updated_with(dtype=dtype) # implant the dtype
-            num_sequences = FromData._len(value)
-            if self._num_sequences == -1:
-                if num_sequences == 0:
+            stream_num_sequences = len(value) if isinstance(value, list) else value.shape[0]
+            if num_sequences == -1:
+                if stream_num_sequences == 0:
                     raise(ValueError('data is empty'))
-                self._num_sequences = num_sequences
-            elif self._num_sequences != num_sequences:
+                num_sequences = stream_num_sequences
+            elif stream_num_sequences != num_sequences:
                 raise TypeError('all data items must have the same first dimension')
             self._data[name] = value
             self._types[name] = type
-            self._is_sequence[name] = is_sequence
-
-    @staticmethod
-    def _len(value): # helper to determine the length of the corpus
-        return len(value) if isinstance(value, list) else value.shape[0]
 
     def stream_infos(self):
         return [StreamInformation(name, i, ['dense', 'sparse'][getattr(self._types[name], 'is_sparse', False)], 
                                   self._types[name].dtype, self._types[name].shape)
                 for i, name in enumerate(self._data.keys())]
 
-    def chunk_infos(self):
-        return [ 0 ]
+    def num_chunks(self):
+        return 1
 
     def get_chunk(self, chunk_id):
         if chunk_id != 0:
             raise ValueError("Unexpected chunk id")
-        return InMemoryChunk(chunk_id, self._data, self.stream_infos())
+        return self._data;
