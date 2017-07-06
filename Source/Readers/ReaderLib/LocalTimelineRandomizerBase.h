@@ -80,6 +80,14 @@ protected:
         size_t m_sequencePosition;
     };
 
+    // Unfortunately destructor is not called for global variables
+    // in Python.
+    ~LocalTimelineRandomizerBase()
+    {
+        if (m_prefetch.valid())
+            m_prefetch.wait_for(std::chrono::seconds(60));
+    }
+
     const static SequenceDescription s_endOfSweep; // Sequence indicating end of the sweep.
 
     DataDeserializerPtr m_deserializer;
@@ -109,6 +117,7 @@ protected:
     SequenceCleaner m_cleaner;
 
     Dictionary m_currentState;
+    std::future<void> m_prefetch;
 };
 
 }

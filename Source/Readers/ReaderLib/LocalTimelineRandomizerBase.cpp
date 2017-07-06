@@ -76,7 +76,8 @@ void LocalTimelineRandomizerBase::GetNextSequenceDescriptions(size_t maxSampleCo
     if (maxSampleCount > std::numeric_limits<int>::max())
         RuntimeError("Local size of the minibatch cannot exceed max int.");
 
-    assert(m_window.m_sequences.size() != 0);
+    if (m_window.m_sequences.empty())
+        RuntimeError("Could not read data.");
 
     size_t samplesLoaded = 0;
     bool atLeastOneSequenceNeeded = true;
@@ -104,7 +105,12 @@ void LocalTimelineRandomizerBase::GetNextSequenceDescriptions(size_t maxSampleCo
         // Ok good to add it to the result.
         m_sequenceBuffer.push_back(sequence);
         if (m_chunkBuffer.find(sequence.m_chunkId) == m_chunkBuffer.end())
-            m_chunkBuffer[sequence.m_chunkId] = m_window.m_dataChunks[sequence.m_chunkId];
+        {
+            auto it = m_window.m_dataChunks.find(sequence.m_chunkId);
+            if (it == m_window.m_dataChunks.end())
+                RuntimeError("Cannot find the data for chunk");
+            m_chunkBuffer[sequence.m_chunkId] = it->second;
+        }
 
         samplesLoaded += sequenceLength;
         atLeastOneSequenceNeeded = false;
@@ -127,10 +133,19 @@ Sequences LocalTimelineRandomizerBase::GetNextSequences(size_t, size_t sampleCou
     {
         result.m_endOfEpoch = true;
         result.m_endOfSweep = false;
+
+        // Make sure we do not issue prefetch when the end is reached.
+        if(m_prefetch.valid())
+            m_prefetch.wait_for(std::chrono::seconds(60));
+
         return result;
     }
 
     GetNextSequenceDescriptions(sampleCount, result);
+
+    // Make sure we do not issue prefetch when the end is reached.
+    if (IsEndReached() && m_prefetch.valid())
+        m_prefetch.wait_for(std::chrono::seconds(60));
 
     if (m_sequenceBuffer.size() == 0)
         return result;

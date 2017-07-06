@@ -62,28 +62,32 @@ class CSVDeserializer(UserDeserializer):
         self._chunksize = chunksize
         rest = 1 if self._filesize % self._chunksize != 0 else 0
         self._num_chunks = int(self._filesize/self._chunksize) + rest
-        self._fin = open(filename, "rb")
+        self._filename = filename
         self._streams = [cntk.io.StreamInformation(s['name'], i, 'dense', np.float32, s['shape'])
                          for i, s in enumerate(streams)]
+        self._offsets = [0]
+        for i, s in enumerate(self._streams):
+            self._offsets.append(s.sample_shape[0] + self._offsets[-1])
 
     # What streams we expose
     def stream_infos(self):
-        return self._streams;
+        return self._streams
     
     # What chunk we have
-    def chunk_infos(self):
-        return [i for i in range(self._num_chunks)]
+    def num_chunks(self):
+        return self._num_chunks
 
     # Should return the UserChunk, let's read the chunk here
     def get_chunk(self, chunk_id):
-        print('Chunk %d requested' % chunk_id)
+        fin = open(filename, "rb")
         endline = ord('\n')
         _64KB = 64 * 1024;
         offset = chunk_id * self._chunksize
         if offset != 0: # Need to find the beginning of the string
             while offset > 0:
                 offset -= _64KB
-                buf = self._fin.read(_64KB)
+                fin.seek(offset)
+                buf = fin.read(_64KB)
                 index = buf.rindex(endline)
                 if index != -1: # Found, breaking
                     offset += index
@@ -92,42 +96,31 @@ class CSVDeserializer(UserDeserializer):
                 raise ValueError('A single row does not fit into the chunk, consider increasing the chunk size')
 
         # reading the data
-        self._fin.seek(offset)
+        fin.seek(offset)
         size = (chunk_id + 1) * self._chunksize - offset
-        data = self._fin.read(size)
+        data = fin.read(size)
         last_endline = data.rindex(endline)
         if last_endline == -1:
             raise ValueError('A single row does not fit into the chunk, consider increasing the chunk size')
         data = data[:last_endline + 1]
-        print('Chunk %d was read' % chunk_id)
-        df = pd.read_csv(io.BytesIO(data), engine='c', dtype=np.float32)
-        print('Chunk %d was csved' % chunk_id)
-        result = CSVChunk(chunk_id, df, self._streams)
-        print('Chunk %d has been delivered, size %d ' % (chunk_id, result._num_sequences))
+        df = pd.read_csv(io.BytesIO(data), engine='c', dtype=np.float32, header=None)
+
+        result = {}
+        mat = df.as_matrix()
+        for i, stream in enumerate(self._streams):
+            result[stream.m_name] = np.ascontiguousarray(mat[:, self._offsets[i]:self._offsets[i + 1]])
         return result
 
-    # Make sure we release all resources
-    def __del__(self):
-        close(self._fin)
-
-d = CSVDeserializer(filename = filename, streams=[dict(name='x', shape=(150,)), dict(name='y', shape=(1,))])
-mbs = MinibatchSource([d], randomize=False, max_sweeps=1, multithreaded_deserializer=False)
+d = CSVDeserializer(filename=filename, streams=[dict(name='x', shape=(150,)), dict(name='y', shape=(1,))])
+mbs = MinibatchSource([d], randomize=False, max_sweeps=1)
 
 total_num_samples = 0
-current_num_samples = 0
 start = time.time()
 while True:
     mb = mbs.next_minibatch(128)
     if not mb:
         break
-    current_num_samples += mb[mbs.streams.x].number_of_samples
-    if current_num_samples % 1280 == 0:
-        end = time.time()
-        print('Number of samples per second %f' % (current_num_samples/(end-start)))
-        start = time.time()
-        total_num_samples += current_num_samples
-        current_num_samples = 0
+    total_num_samples += mb[mbs.streams.x].number_of_samples
+end = time.time()
 
-total_num_samples += current_num_samples
-print('Total number of samples %d' % total_num_samples)
-
+print('Total number of samples %d, speed %f samples per second' % (total_num_samples, total_num_samples/(end-start)))

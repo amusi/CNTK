@@ -46,7 +46,6 @@ private:
     // Randomized chunk descriptions.
     ChunkDescriptions m_prefetchedChunkDescriptions;
 
-    std::future<void> m_prefetch;
     std::vector<std::tuple<ChunkDescription, ChunkPtr, std::vector<SequenceDescription>>> m_prefetchedChunks;
     bool m_sampleBasedRandomizationWindow;
 };

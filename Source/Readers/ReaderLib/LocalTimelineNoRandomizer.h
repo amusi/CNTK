@@ -29,6 +29,12 @@ public:
     void SetInnerState(const Dictionary& state) override;
     void RefillSequenceWindow() override;
 
+    ~LocalTimelineNoRandomizer()
+    {
+        if (m_prefetch.valid())
+            m_prefetch.wait_for(std::chrono::seconds(60));
+    }
+
 private:
     void PrefetchChunk();
 
@@ -37,8 +43,6 @@ private:
 
     // Current sequence position
     size_t m_currentSequencePosition;
-
-    std::future<void> m_prefetch;
     std::tuple<ChunkDescription, ChunkPtr, std::vector<SequenceDescription>> m_prefetchedChunk;
 };
 

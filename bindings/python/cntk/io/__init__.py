@@ -163,13 +163,10 @@ class MinibatchSource(cntk_py.MinibatchSource):
 
     @staticmethod
     def _create_deserializer(id):
-        return MinibatchSource._runtime_deserializer_table[id]
+        der = MinibatchSource._runtime_deserializer_table[id]
+        del MinibatchSource._runtime_deserializer_table[id]
+        return der
 
-    @staticmethod
-    def _free_globals():
-        globals().clear()
-        import gc
-        gc.collect()
 
     @staticmethod
     def _serialize(deserializer):
@@ -177,9 +174,6 @@ class MinibatchSource(cntk_py.MinibatchSource):
         from cntk.internal import _DeserializerFactory
 
         if MinibatchSource._deserializer_factory is None:
-            import atexit
-            atexit.register(MinibatchSource._free_globals)
-
             MinibatchSource._deserializer_factory = _DeserializerFactory(MinibatchSource._create_deserializer)
             cntk_py._register_deserializer_factory(MinibatchSource._deserializer_factory)
 
@@ -1134,11 +1128,11 @@ class UserDeserializer(cntk_py.SwigDataDeserializer):
         '''
         raise NotImplementedError
 
-    def chunk_infos(self):
+    def num_chunks(self):
         '''
-        Array of unique chunk ids.
+        Should return the total number of chunks.
         '''
-        raise NotImplementedError
+        raise NotImplementedError('please implement num_chunks: it should return the total number of chunks.')
 
     def get_chunk(self, chunk_id):
         '''
@@ -1165,14 +1159,14 @@ class UserDeserializer(cntk_py.SwigDataDeserializer):
         self.streams = Record(**streams)
 
     def _chunk_infos(self, infos=None):
+        total = self.num_chunks()
+        if total == 0:
+            raise ValueError('Deserializer must provide at least one chunk')
         inner = []
-        for c in self.chunk_infos():
+        for i in range(total):
             t = cntk_py.ChunkDescription()
-            t.m_id = c
+            t.m_id = i
             inner.append(t)
-        if len(inner) == 0:
-            raise ValueError('Deserializer must provide at least on chunk')
-
         infos.extend(inner)
 
     def _get_chunk(self, chunk_id):
